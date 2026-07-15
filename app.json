@@ -1,0 +1,49 @@
+{
+  "expo": {
+    "name": "BeeMacQueue",
+    "slug": "beemacqueue",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#E8002D"
+    },
+    "assetBundlePatterns": ["**/*"],
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "ph.cdo.beemacqueue"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#E8002D"
+      },
+      "package": "ph.cdo.beemacqueue"
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "single",
+      "favicon": "./assets/icon.png",
+      "name": "BeeMacQueue CDO"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-font",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/icon.png",
+          "color": "#E8002D",
+          "sounds": []
+        }
+      ]
+    ],
+    "scheme": "beemacqueue",
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}

@@ -11,6 +11,7 @@ import { QueueTicketCard } from '../../components/QueueTicketCard';
 import { JoinModal } from '../../components/JoinModal';
 import { FilterBar } from '../../components/FilterBar';
 import { SectionLabel, EmptyState, LiveDot } from '../../components/ui';
+import { SafeScreen } from '../../components/SafeScreen';
 import { COLORS } from '../../lib/constants';
 import { Establishment } from '../../types';
 
@@ -77,7 +78,7 @@ export default function HomeScreen() {
   };
 
   return (
-    <View style={styles.container}>
+    <SafeScreen style={styles.container}>
       <View style={styles.header}>
         <View>
           <Text style={styles.headerTitle}>
@@ -161,7 +162,7 @@ export default function HomeScreen() {
         onConfirm={handleJoin}
         onClose={() => setSelectedEst(null)}
       />
-    </View>
+    </SafeScreen>
   );
 }
 

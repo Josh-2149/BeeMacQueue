@@ -1,4 +1,4 @@
-export type UserRole = 'customer' | 'admin';
+export type UserRole = 'customer' | 'staff';  // ← Added 'staff'
 export type QueueStatus = 'waiting' | 'serving' | 'served' | 'cancelled';
 export type BrandType = 'jollibee' | 'mcdo';
 
@@ -7,6 +7,8 @@ export interface Profile {
   name: string;
   email: string;
   role: UserRole;
+  brand?: BrandType;        // ← Added for staff
+  branch?: string;          // ← Added for staff
   queues_joined: number;
   avatar_url?: string;
   created_at: string;

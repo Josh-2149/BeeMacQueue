@@ -11,7 +11,9 @@
       "resizeMode": "contain",
       "backgroundColor": "#E8002D"
     },
-    "assetBundlePatterns": ["**/*"],
+    "assetBundlePatterns": [
+      "**/*"
+    ],
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "ph.cdo.beemacqueue"
@@ -39,7 +41,8 @@
           "color": "#E8002D",
           "sounds": []
         }
-      ]
+      ],
+      "expo-secure-store"
     ],
     "scheme": "beemacqueue",
     "experiments": {

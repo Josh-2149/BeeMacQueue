@@ -3,6 +3,7 @@ import { useAuth } from '../../hooks/useAuth';
 import { useQueue } from '../../hooks/useQueue';
 import { QueueTicketCard } from '../../components/QueueTicketCard';
 import { SectionLabel, EmptyState, Badge } from '../../components/ui';
+import { SafeScreen } from '../../components/SafeScreen';
 import { COLORS, BRAND } from '../../lib/constants';
 import { QueueEntry } from '../../types';
 
@@ -21,7 +22,7 @@ export default function MyQueueScreen() {
   }
 
   return (
-    <View style={styles.container}>
+    <SafeScreen style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.headerTitle}>My Queue</Text>
         <Text style={styles.headerSub}>Your active ticket and history</Text>
@@ -80,7 +81,7 @@ export default function MyQueueScreen() {
           })
         )}
       </ScrollView>
-    </View>
+    </SafeScreen>
   );
 }
 

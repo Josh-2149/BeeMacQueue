@@ -2,6 +2,7 @@ import { View, Text, ScrollView, StyleSheet, TouchableOpacity, ActivityIndicator
 import { useAuth } from '../../hooks/useAuth';
 import { useNotifications } from '../../hooks/useNotifications';
 import { EmptyState } from '../../components/ui';
+import { SafeScreen } from '../../components/SafeScreen';
 import { COLORS } from '../../lib/constants';
 import { AppNotification } from '../../types';
 
@@ -30,7 +31,7 @@ export default function NotificationsScreen() {
   }
 
   return (
-    <View style={styles.container}>
+    <SafeScreen style={styles.container}>
       <View style={styles.header}>
         <View>
           <Text style={styles.headerTitle}>Notifications</Text>
@@ -75,7 +76,7 @@ export default function NotificationsScreen() {
           ))}
         </ScrollView>
       )}
-    </View>
+    </SafeScreen>
   );
 }
 

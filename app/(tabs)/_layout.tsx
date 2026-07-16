@@ -1,7 +1,7 @@
 import { Tabs } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
+import { Bell, House, Ticket, User } from 'phosphor-react-native';
 import { View, Text } from 'react-native';
-import { COLORS } from '../../lib/constants';
+import { COLORS, ICON_COLOR, ICON_SIZE } from '../../lib/constants';
 import { useAuth } from '../../hooks/useAuth';
 import { useNotifications } from '../../hooks/useNotifications';
 
@@ -9,24 +9,14 @@ export default function TabsLayout() {
   const { user, profile } = useAuth();
   const { unreadCount } = useNotifications(user?.id);
 
-  function TabIcon({ name, focused }: { name: any; focused: boolean }) {
-    return (
-      <Ionicons
-        name={name}
-        size={24}
-        color={focused ? COLORS.red : COLORS.gray400}
-      />
-    );
+  function TabIcon({ icon: Icon, focused }: { icon: typeof House; focused: boolean }) {
+    return <Icon size={ICON_SIZE} color={focused ? ICON_COLOR.active : ICON_COLOR.inactive} weight={focused ? 'fill' : 'regular'} />;
   }
 
   function NotifIcon({ focused }: { focused: boolean }) {
     return (
       <View>
-        <Ionicons
-          name="notifications-outline"
-          size={24}
-          color={focused ? COLORS.red : COLORS.gray400}
-        />
+        <Bell size={ICON_SIZE} color={focused ? ICON_COLOR.active : ICON_COLOR.inactive} weight={focused ? 'fill' : 'regular'} />
         {unreadCount > 0 && (
           <View style={{
             position: 'absolute', top: -4, right: -6,
@@ -66,7 +56,7 @@ export default function TabsLayout() {
         options={{
           title: 'Home',
           href: '/(tabs)/home',
-          tabBarIcon: ({ focused }) => <TabIcon name="home-outline" focused={focused} />,
+          tabBarIcon: ({ focused }) => <TabIcon icon={House} focused={focused} />,
         }}
       />
       <Tabs.Screen
@@ -74,7 +64,7 @@ export default function TabsLayout() {
         options={{
           title: 'My Queue',
           href: '/(tabs)/my-queue',
-          tabBarIcon: ({ focused }) => <TabIcon name="receipt-outline" focused={focused} />,
+          tabBarIcon: ({ focused }) => <TabIcon icon={Ticket} focused={focused} />,
         }}
       />
       <Tabs.Screen
@@ -90,7 +80,7 @@ export default function TabsLayout() {
         options={{
           title: 'Profile',
           href: '/(tabs)/profile',
-          tabBarIcon: ({ focused }) => <TabIcon name="person-outline" focused={focused} />,
+          tabBarIcon: ({ focused }) => <TabIcon icon={User} focused={focused} />,
         }}
       />
       {/* Removed admin tab - intentionally omitted from UI */}

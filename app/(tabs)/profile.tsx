@@ -5,6 +5,7 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuth } from '../../hooks/useAuth';
+import { SafeScreen } from '../../components/SafeScreen';
 import { COLORS } from '../../lib/constants';
 
 function MenuItem({
@@ -74,7 +75,7 @@ export default function ProfileScreen() {
   }
 
   return (
-    <View style={styles.container}>
+    <SafeScreen style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Profile</Text>
       </View>
@@ -93,29 +94,11 @@ export default function ProfileScreen() {
             </View>
             <View style={styles.statDiv} />
             <View style={styles.stat}>
-              <Text style={styles.statNum}>{profile?.role === 'admin' ? '🛡️' : '👤'}</Text>
+              <Text style={styles.statNum}>👤</Text>
               <Text style={styles.statLabel}>{profile?.role ?? 'customer'}</Text>
             </View>
           </View>
         </View>
-
-        {profile?.role === 'admin' && (
-          <>
-            <Text style={styles.sectionLabel}>ADMIN</Text>
-            <TouchableOpacity
-              style={styles.adminShortcut}
-              onPress={() => router.push('/(tabs)/admin')}
-              activeOpacity={0.8}
-            >
-              <Text style={styles.adminShortcutIcon}>🛡️</Text>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.adminShortcutTitle}>Admin Dashboard</Text>
-                <Text style={styles.adminShortcutSub}>Manage queues & branches</Text>
-              </View>
-              <Text style={{ color: COLORS.red, fontSize: 20 }}>›</Text>
-            </TouchableOpacity>
-          </>
-        )}
 
         <Text style={styles.sectionLabel}>ACCOUNT</Text>
         <MenuItem
@@ -189,7 +172,7 @@ export default function ProfileScreen() {
           </View>
         </View>
       </Modal>
-    </View>
+    </SafeScreen>
   );
 }
 
@@ -217,14 +200,6 @@ const styles = StyleSheet.create({
   statLabel: { fontSize: 10, color: 'rgba(255,255,255,0.65)', textTransform: 'uppercase', letterSpacing: 0.4, marginTop: 2 },
   statDiv: { width: 1, backgroundColor: 'rgba(255,255,255,0.2)', marginVertical: 4 },
   sectionLabel: { fontSize: 11, fontWeight: '700', color: COLORS.gray400, letterSpacing: 0.8, textTransform: 'uppercase', marginBottom: 8, marginTop: 4 },
-  adminShortcut: {
-    flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.redLight,
-    borderRadius: 14, padding: 16, marginBottom: 16,
-    borderWidth: 1.5, borderColor: COLORS.redBorder,
-  },
-  adminShortcutIcon: { fontSize: 24, marginRight: 12 },
-  adminShortcutTitle: { fontSize: 15, fontWeight: '800', color: COLORS.red },
-  adminShortcutSub: { fontSize: 12, color: COLORS.redDark, opacity: 0.7, marginTop: 2 },
   menuItem: {
     flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.white,
     borderRadius: 14, padding: 14, marginBottom: 8,

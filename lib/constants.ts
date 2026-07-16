@@ -28,6 +28,12 @@ export const COLORS = {
   orangeLight: '#FFF7ED',
 };
 
+export const ICON_SIZE = 24;
+export const ICON_COLOR = {
+  active: COLORS.red,
+  inactive: COLORS.gray400,
+};
+
 export const BRAND = {
   jollibee: {
     label: 'Jollibee',

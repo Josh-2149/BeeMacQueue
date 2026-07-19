@@ -1,0 +1,123 @@
+Here's your complete project structure with detailed comments on each folder and file's purpose:
+
+```
+BeeMacQueue/
+│
+├── 📁 app/                          # Main application screens (Expo Router)
+│   │
+│   ├── 📁 (auth)/                   # Authentication routes (no tab bar)
+│   │   ├── 📄 _layout.tsx           # Auth stack navigator configuration
+│   │   ├── 📄 forgot-password.tsx   # Password reset screen
+│   │   ├── 📄 login.tsx             # User login screen with email/password
+│   │   └── 📄 register.tsx          # New user registration screen
+│   │
+│   ├── 📁 (customer)/               # Customer-facing routes (with tab bar)
+│   │   ├── 📄 _layout.tsx           # Customer tab navigator (home, my-queue, etc.)
+│   │   ├── 📄 home.tsx              # Main customer home screen - view establishments
+│   │   ├── 📄 my-queue.tsx          # Customer's active queue tickets
+│   │   ├── 📄 notifications.tsx     # Customer notifications
+│   │   └── 📄 profile.tsx           # Customer profile and settings
+│   │
+│   ├── 📁 (staff)/                  # Staff/Admin routes (with tab bar)
+│   │   ├── 📄 _layout.tsx           # Staff tab navigator (dashboard, my-queue, etc.)
+│   │   ├── 📄 dashboard.tsx         # ⭐ Staff dashboard - manage queues, create new queues
+│   │   ├── 📄 my-queue.tsx          # Staff view of all active queues
+│   │   ├── 📄 notifications.tsx     # Staff notifications
+│   │   └── 📄 profile.tsx           # Staff profile and settings
+│   │
+│   └── 📄 _layout.tsx               # Root layout - authentication & navigation logic
+│
+├── 📁 assets/                       # Static assets (images, icons, splash screen)
+│   ├── 🖼️ adaptive-icon.png         # Adaptive app icon for Android
+│   ├── 🖼️ icon.png                  # Main app icon
+│   └── 🖼️ splash.png                # App splash screen image
+│
+├── 📁 components/                   # Reusable UI components
+│   ├── 📄 EstablishmentCard.tsx     # Card displaying business/establishment info
+│   ├── 📄 StaffHeader.tsx
+│   ├── 📄 FilterBar.tsx             # Search and filter bar for establishments
+│   ├── 📄 JoinModal.tsx             # Modal for customers joining a queue
+│   ├── 📄 NotificationBadge.tsx     # Badge showing notification count
+│   ├── 📄 PhosphorIcon.tsx          # ⚠️ Icon component wrapper (has icon issues)
+│   ├── 📄 QueueTicketCard.tsx       # Card showing a customer's queue ticket
+│   ├── 📄 SafeScreen.tsx            # Safe area wrapper with status bar handling
+│   ├── 📄 StaffQueueCard.tsx        # Staff view of individual queue entries
+│   ├── 📄 StaffStatsCard.tsx        # Staff dashboard statistics card
+│   └── 📄 ui.tsx                    # Core UI components (Button, Input, Card, etc.)
+│
+├── 📁 context/                      # React Context providers for state management
+│   ├── 📄 NotificationContext.tsx   # Notification state and real-time updates
+│   ├── 📄 QueueContext.tsx          # Customer queue state management
+│   └── 📄 StaffQueueContext.tsx     # Staff queue state management (singleton)
+│
+├── 📁 hooks/                        # Custom React hooks
+│   ├── 📄 useAuth.ts                # 🔐 Authentication hook (session, profile, login/logout)
+│   ├── 📄 useEstablishments.ts      # Fetch and manage establishment data
+│   ├── 📄 useNotifications.ts       # Notification subscription and management
+│   ├── 📄 useQueue.ts               # Customer queue operations (join, leave, etc.)
+│   └── 📄 useStaffQueue.ts          # Staff queue operations (create, serve, cancel, etc.)
+│
+├── 📁 lib/                          # Utilities and configuration
+│   ├── 📄 constants.ts              # App constants (COLORS, BRAND, ICON_SIZE, etc.)
+│   └── 📄 supabase.ts               # Supabase client configuration and initialization
+│
+├── 📁 types/                        # TypeScript type definitions
+│   └── 📄 index.ts                  # All TypeScript interfaces and types (User, Queue, etc.)
+│
+├── 📄 .env                          # Environment variables (local - gitignored)
+├── 📄 .env.example                  # Environment variables template
+├── 📄 .gitignore                    # Git ignore rules
+├── 📄 app.json                      # Expo app configuration (name, version, etc.)
+├── 📄 babel.config.js               # Babel configuration for React Native
+├── 📄 debug.ts                      # Debugging utilities
+├── 📄 eslint.config.js              # ESLint configuration for code quality
+├── 📄 package.json                  # NPM dependencies and scripts
+├── 📄 projectstructure.md           # Project structure documentation
+├── 📄 README.md                     # Project overview and setup instructions
+├── 📄 supabase-setup.sql            # Supabase database schema SQL
+├── 📄 test-supabase.js              # Supabase connection test script
+├── 📄 TODO.md                       # Project task list and roadmap
+└── 📄 tsconfig.json                 # TypeScript configuration
+```
+
+## 📋 Key Files Explanation:
+
+### Authentication Flow:
+1. **`app/_layout.tsx`** - Root navigation, checks if user is logged in, redirects to appropriate screen
+2. **`app/(auth)/login.tsx`** - User login page
+3. **`app/(auth)/register.tsx`** - New user registration
+4. **`hooks/useAuth.ts`** - Manages authentication state with Supabase
+
+### Staff Features (The ones you're working on):
+1. **`app/(staff)/dashboard.tsx`** ⭐ - Main staff dashboard with:
+   - Queue statistics (waiting, serving, completed)
+   - Tab navigation between queue states
+   - **"Create New Queue" modal** (the one with dropdown issues)
+   - FAB button to open modal
+
+2. **`components/StaffStatsCard.tsx`** - Shows queue statistics
+3. **`components/StaffQueueCard.tsx`** - Individual queue entry display
+4. **`context/StaffQueueContext.tsx`** - Staff queue state management
+5. **`hooks/useStaffQueue.ts`** - Staff queue operations (serve, cancel, create)
+
+### Customer Features:
+1. **`app/(customer)/home.tsx`** - Main screen showing establishments
+2. **`components/JoinModal.tsx`** - Modal for joining a queue
+3. **`hooks/useQueue.ts`** - Queue operations for customers
+
+### Current Issues to Fix:
+1. **Dropdown in `dashboard.tsx`** - Not fully visible, being cut off
+2. **PhosphorIcon.tsx** - Missing icons (Textbox, Note, etc.)
+3. **Modal height** - Not enough space for dropdown
+
+## 🎯 Files Needing Fixes:
+
+1. **`app/(staff)/dashboard.tsx`** - Modal and dropdown issues
+2. **`components/PhosphorIcon.tsx`** - Icon mapping issues
+
+The main issue is the dropdown in the "Create New Queue" modal on the staff dashboard. The modal doesn't have enough height, so the dropdown options are getting cut off. We need to either:
+- Increase the modal height
+- Make the dropdown appear above the input field
+- Make the modal scrollable
+
+Would you like me to provide a fix for just the `dashboard.tsx` file?

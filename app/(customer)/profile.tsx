@@ -8,6 +8,8 @@ import { useAuth } from '../../hooks/useAuth';
 import { SafeScreen } from '../../components/SafeScreen';
 import { COLORS } from '../../lib/constants';
 
+console.log('👤 [Customer Profile] Screen mounted');
+
 function MenuItem({
   icon, label, sub, onPress, danger,
 }: {
@@ -28,7 +30,8 @@ function MenuItem({
   );
 }
 
-export default function ProfileScreen() {
+export default function CustomerProfileScreen() {
+  console.log('👤 [Customer Profile] Rendering');
   const router = useRouter();
   const { user, profile, signOut, updateProfile, updatePassword } = useAuth();
   const [editModal, setEditModal] = useState(false);

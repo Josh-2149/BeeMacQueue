@@ -1,5 +1,5 @@
-export type UserRole = 'customer' | 'staff';  // ← Added 'staff'
-export type QueueStatus = 'waiting' | 'serving' | 'served' | 'cancelled';
+export type UserRole = 'customer' | 'staff' | 'admin';
+export type QueueStatus = 'waiting' | 'called' | 'serving' | 'completed' | 'cancelled' | 'no_show';
 export type BrandType = 'jollibee' | 'mcdo';
 
 export interface Profile {
@@ -7,8 +7,10 @@ export interface Profile {
   name: string;
   email: string;
   role: UserRole;
-  brand?: BrandType;        // ← Added for staff
-  branch?: string;          // ← Added for staff
+  brand?: BrandType;
+  branch?: string;
+  staff_id?: string;
+  phone_number?: string;
   queues_joined: number;
   avatar_url?: string;
   created_at: string;
@@ -25,6 +27,12 @@ export interface Establishment {
   avg_wait_mins: number;
   is_open: boolean;
   created_at: string;
+  created_by?: string;
+  last_served_at?: string;
+  operating_hours?: any;
+  capacity?: number;
+  qr_code?: string;
+  phone_number?: string;
 }
 
 export interface QueueEntry {
@@ -34,6 +42,16 @@ export interface QueueEntry {
   ticket_number: number;
   status: QueueStatus;
   created_at: string;
+  updated_at?: string;
+  position?: number;
+  called_at?: string;
+  served_by?: string;
+  served_at?: string;
+  estimated_wait_mins?: number;
+  priority?: number;
+  notes?: string;
+  party_size?: number;
+  table_number?: string;
   establishment?: Establishment;
   user?: Profile;
 }
@@ -46,4 +64,8 @@ export interface AppNotification {
   type: 'queue' | 'serve' | 'info';
   is_read: boolean;
   created_at: string;
+  action_url?: string;
+  priority?: 'high' | 'normal' | 'low';
+  expires_at?: string;
+  metadata?: any;
 }

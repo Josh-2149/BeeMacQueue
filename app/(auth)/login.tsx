@@ -2,9 +2,9 @@ import React, { useState, useRef, useEffect } from 'react';
 import {
   View,
   Text,
+  TextInput,
   TouchableOpacity,
   StyleSheet,
-  TextInput,
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
@@ -14,28 +14,23 @@ import {
   Keyboard,
 } from 'react-native';
 import { Link, useRouter } from 'expo-router';
-import * as WebBrowser from 'expo-web-browser';
-import { makeRedirectUri } from 'expo-auth-session';
-import { supabase } from '../../lib/supabase';
-import { COLORS } from '../../lib/constants';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { PhosphorIcon } from '../../components/PhosphorIcon';
 import { StatusBar } from 'expo-status-bar';
+import { useAuth } from '../../hooks/useAuth';
+import { COLORS } from '../../lib/constants';
+import { PhosphorIcon } from '../../components/PhosphorIcon';
 
-console.log('🔵 [LOGIN] Screen mounted');
-
-WebBrowser.maybeCompleteAuthSession();
+console.log('🔑 [Login] Screen mounted');
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 export default function LoginScreen() {
-  console.log('🔄 [LOGIN] Rendering');
-  
+  console.log('🔑 [Login] Rendering');
   const router = useRouter();
+  const { signIn, loading } = useAuth();
+  
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [oauthLoading, setOauthLoading] = useState<'google' | 'facebook' | null>(null);
   const [error, setError] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
@@ -43,11 +38,7 @@ export default function LoginScreen() {
   const slideAnim = useRef(new Animated.Value(0)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
 
-  const redirectTo = makeRedirectUri({ scheme: 'beemacqueue', path: 'auth/callback' });
-  console.log('🔑 [LOGIN] Redirect URI:', redirectTo);
-
   useEffect(() => {
-    console.log('🎬 [LOGIN] Starting animations');
     Animated.parallel([
       Animated.timing(slideAnim, {
         toValue: 1,
@@ -59,11 +50,8 @@ export default function LoginScreen() {
         duration: 800,
         useNativeDriver: true,
       }),
-    ]).start(() => {
-      console.log('✅ [LOGIN] Animations completed');
-    });
+    ]).start();
 
-    // Keyboard listeners
     const keyboardDidShow = Keyboard.addListener('keyboardDidShow', () => {
       setIsKeyboardVisible(true);
     });
@@ -79,104 +67,48 @@ export default function LoginScreen() {
 
   const slideTransform = slideAnim.interpolate({
     inputRange: [0, 1],
-    outputRange: [SCREEN_HEIGHT * 0.3, 0],
+    outputRange: [SCREEN_HEIGHT * 0.25, 0],
   });
 
-  async function handleLogin() {
-    console.log('🔐 [LOGIN] Attempting login with email:', email);
+  const handleLogin = async () => {
+    console.log('🔑 [Login] Login attempt:', email);
     setError('');
     Keyboard.dismiss();
+    
     if (!email.trim() || !password) {
-      console.log('❌ [LOGIN] Validation failed: Empty fields');
-      setError('Please enter your email and password.');
+      setError('Please enter email and password');
       return;
     }
-    setLoading(true);
-    try {
-      const { error: e } = await supabase.auth.signInWithPassword({
-        email: email.trim(),
-        password,
-      });
-      setLoading(false);
-      if (e) {
-        console.log('❌ [LOGIN] Login error:', e.message);
-        setError(e.message);
-      } else {
-        console.log('✅ [LOGIN] Login successful, navigating to home');
-        router.replace('/(tabs)/home');
-      }
-    } catch (err) {
-      console.log('❌ [LOGIN] Unexpected login error:', err);
-      setLoading(false);
-      setError('An unexpected error occurred');
-    }
-  }
 
-  async function handleOAuth(provider: 'google' | 'facebook') {
-    console.log(`🔐 [LOGIN] Starting ${provider} OAuth flow`);
-    setOauthLoading(provider);
-    try {
-      const { data, error: e } = await supabase.auth.signInWithOAuth({
-        provider,
-        options: { redirectTo, skipBrowserRedirect: true },
-      });
-      if (e) {
-        console.log(`❌ [LOGIN] ${provider} OAuth error:`, e.message);
-        setError(e.message);
-        return;
-      }
-      if (data?.url) {
-        console.log(`✅ [LOGIN] ${provider} OAuth URL received`);
-        const result = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
-        console.log(`📱 [LOGIN] ${provider} OAuth result type:`, result.type);
-        if (result.type === 'success') {
-          const url = new URL(result.url);
-          const access_token =
-            url.searchParams.get('access_token') ??
-            url.hash.match(/access_token=([^&]+)/)?.[1];
-          const refresh_token =
-            url.searchParams.get('refresh_token') ??
-            url.hash.match(/refresh_token=([^&]+)/)?.[1];
-          if (access_token && refresh_token) {
-            console.log('✅ [LOGIN] Setting session from OAuth');
-            await supabase.auth.setSession({ access_token, refresh_token });
-          }
-        }
-      }
-    } catch (err) {
-      console.log(`❌ [LOGIN] ${provider} OAuth unexpected error:`, err);
-      setError(`Failed to sign in with ${provider}`);
-    } finally {
-      setOauthLoading(null);
+    const result = await signIn(email.trim(), password);
+    console.log('🔑 [Login] Login result:', result);
+    
+    if (!result.success) {
+      setError(result.error || 'Login failed');
     }
-  }
+  };
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <StatusBar style="light" />
       
-      {/* Background */}
       <View style={styles.background}>
         <View style={styles.gradientTop} />
         <View style={styles.gradientBottom} />
       </View>
 
-      {/* Header - Only show when keyboard is hidden */}
       {!isKeyboardVisible && (
         <Animated.View style={[styles.header, { opacity: fadeAnim }]}>
-          <View style={styles.brandContainer}>
-            <View style={styles.logoWrapper}>
-              <PhosphorIcon icon="Storefront" size={40} color={COLORS.yellow} weight="fill" />
-            </View>
-            <Text style={styles.brandName}>
-              Bee<Text style={styles.brandHighlight}>Mac</Text>Queue
-            </Text>
-            <Text style={styles.brandSubtitle}>Skip the line, enjoy your meal</Text>
+          <View style={styles.logoWrapper}>
+            <PhosphorIcon icon="Storefront" size={48} color={COLORS.yellow} weight="fill" />
           </View>
+          <Text style={styles.brandName}>
+            Bee<Text style={styles.brandHighlight}>Mac</Text>Queue
+          </Text>
+          <Text style={styles.brandSubtitle}>Skip the line, enjoy your meal</Text>
         </Animated.View>
       )}
 
-      {/* Bottom Sheet - Fixed position, no animation on keyboard */}
       <Animated.View 
         style={[
           styles.bottomSheet,
@@ -191,7 +123,7 @@ export default function LoginScreen() {
         </View>
 
         <KeyboardAvoidingView 
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           style={styles.keyboardView}
           keyboardVerticalOffset={Platform.OS === 'ios' ? 64 : 0}
         >
@@ -199,155 +131,80 @@ export default function LoginScreen() {
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
             contentContainerStyle={styles.scrollContent}
-          > 
-          
-            <View style={styles.headerContent}>
-              <Text style={styles.welcomeText}>Welcome Back! 👋</Text>
-              <Text style={styles.welcomeSubtext}>Sign in to continue to your queue</Text>
-            </View>
+          >
+            <Text style={styles.welcome}>Welcome Back! 👋</Text>
+            <Text style={styles.welcomeSub}>Sign in to continue</Text>
 
             {error ? (
-              <View style={styles.errorContainer}>
+              <View style={styles.errorBox}>
                 <PhosphorIcon icon="WarningCircle" size={20} color={COLORS.red} weight="fill" />
                 <Text style={styles.errorText}>{error}</Text>
-                <TouchableOpacity onPress={() => setError('')} style={styles.errorClose}>
-                  <PhosphorIcon icon="X" size={16} color={COLORS.red} />
-                </TouchableOpacity>
               </View>
             ) : null}
 
-            <View style={styles.form}>
-              {/* Email Input */}
-              <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>Email Address</Text>
-                <View style={styles.inputWrapper}>
-                  <PhosphorIcon icon="Envelope" size={20} color={COLORS.gray400} />
-                  <TextInput
-                    style={styles.input}
-                    value={email}
-                    onChangeText={(t) => { 
-                      setEmail(t); 
-                      setError(''); 
-                    }}
-                    placeholder="your@email.com"
-                    placeholderTextColor={COLORS.gray400}
-                    keyboardType="email-address"
-                    autoCapitalize="none"
-                    autoCorrect={false}
-                    returnKeyType="next"
-                    blurOnSubmit={false}
-                  />
-                </View>
-              </View>
-
-              {/* Password Input */}
-              <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>Password</Text>
-                <View style={styles.inputWrapper}>
-                  <PhosphorIcon icon="Lock" size={20} color={COLORS.gray400} />
-                  <TextInput
-                    style={[styles.input, styles.passwordInput]}
-                    value={password}
-                    onChangeText={(t) => { 
-                      setPassword(t); 
-                      setError(''); 
-                    }}
-                    placeholder="Enter your password"
-                    placeholderTextColor={COLORS.gray400}
-                    secureTextEntry={!showPassword}
-                    returnKeyType="go"
-                    onSubmitEditing={handleLogin}
-                  />
-                  <TouchableOpacity 
-                    onPress={() => setShowPassword(!showPassword)}
-                    style={styles.eyeButton}
-                  >
-                    <PhosphorIcon 
-                      icon={showPassword ? "Eye" : "EyeSlash"} 
-                      size={20} 
-                      color={COLORS.gray400} 
-                    />
-                  </TouchableOpacity>
-                </View>
-              </View>
-
-              <Link href="/(auth)/forgot-password" asChild>
-                <TouchableOpacity style={styles.forgotContainer}>
-                  <Text style={styles.forgotText}>Forgot password?</Text>
-                </TouchableOpacity>
-              </Link>
-
-              {/* Sign In Button */}
-              <TouchableOpacity
-                style={[styles.signInButton, loading && styles.buttonDisabled]}
-                onPress={handleLogin}
-                disabled={loading}
-                activeOpacity={0.8}
-              >
-                {loading ? (
-                  <ActivityIndicator color={COLORS.white} />
-                ) : (
-                  <>
-                    <Text style={styles.signInText}>Sign In</Text>
-                    <PhosphorIcon icon="ArrowRight" size={22} color={COLORS.white} weight="bold" />
-                  </>
-                )}
-              </TouchableOpacity>
-
-              {/* Divider */}
-              <View style={styles.dividerContainer}>
-                <View style={styles.dividerLine} />
-                <Text style={styles.dividerText}>or continue with</Text>
-                <View style={styles.dividerLine} />
-              </View>
-
-              {/* Social Buttons */}
-              <View style={styles.socialContainer}>
-                <TouchableOpacity
-                  style={[styles.socialButton, styles.googleButton]}
-                  onPress={() => handleOAuth('google')}
-                  disabled={!!oauthLoading}
-                  activeOpacity={0.7}
-                >
-                  {oauthLoading === 'google' ? (
-                    <ActivityIndicator color={COLORS.gray700} size="small" />
-                  ) : (
-                    <>
-                      <PhosphorIcon icon="GoogleLogo" size={24} color="#EA4335" />
-                      <Text style={styles.socialText}>Google</Text>
-                    </>
-                  )}
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={[styles.socialButton, styles.facebookButton]}
-                  onPress={() => handleOAuth('facebook')}
-                  disabled={!!oauthLoading}
-                  activeOpacity={0.7}
-                >
-                  {oauthLoading === 'facebook' ? (
-                    <ActivityIndicator color={COLORS.white} size="small" />
-                  ) : (
-                    <>
-                      <PhosphorIcon icon="FacebookLogo" size={24} color={COLORS.white} weight="fill" />
-                      <Text style={[styles.socialText, styles.facebookText]}>Facebook</Text>
-                    </>
-                  )}
-                </TouchableOpacity>
-              </View>
-
-              {/* Sign Up Link */}
-              <View style={styles.signUpContainer}>
-                <Text style={styles.signUpText}>Don't have an account? </Text>
-                <Link href="/(auth)/register" asChild>
-                  <TouchableOpacity>
-                    <Text style={styles.signUpLink}>Create one</Text>
-                  </TouchableOpacity>
-                </Link>
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Email Address</Text>
+              <View style={[styles.inputWrapper, email ? styles.inputFilled : null]}>
+                <PhosphorIcon icon="Envelope" size={20} color={email ? COLORS.red : COLORS.gray400} />
+                <TextInput
+                  style={styles.input}
+                  value={email}
+                  onChangeText={setEmail}
+                  placeholder="your@email.com"
+                  placeholderTextColor={COLORS.gray400}
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                />
               </View>
             </View>
 
-            <Text style={styles.footerText}>BeeMacQueue CDO • Powered by Supabase</Text>
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Password</Text>
+              <View style={[styles.inputWrapper, password ? styles.inputFilled : null]}>
+                <PhosphorIcon icon="Lock" size={20} color={password ? COLORS.red : COLORS.gray400} />
+                <TextInput
+                  style={[styles.input, styles.passwordInput]}
+                  value={password}
+                  onChangeText={setPassword}
+                  placeholder="Enter your password"
+                  placeholderTextColor={COLORS.gray400}
+                  secureTextEntry={!showPassword}
+                />
+                <TouchableOpacity onPress={() => setShowPassword(!showPassword)} style={styles.eyeButton}>
+                  <PhosphorIcon icon={showPassword ? "Eye" : "EyeSlash"} size={20} color={COLORS.gray400} />
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            <TouchableOpacity style={styles.forgotButton}>
+              <Text style={styles.forgotText}>Forgot password?</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.loginButton, loading && styles.buttonDisabled]}
+              onPress={handleLogin}
+              disabled={loading}
+              activeOpacity={0.8}
+            >
+              {loading ? (
+                <ActivityIndicator color={COLORS.white} />
+              ) : (
+                <>
+                  <Text style={styles.loginText}>Sign In</Text>
+                  <PhosphorIcon icon="ArrowRight" size={20} color={COLORS.white} weight="bold" />
+                </>
+              )}
+            </TouchableOpacity>
+
+            <View style={styles.footer}>
+              <Text style={styles.footerText}>Don't have an account? </Text>
+              <Link href="/(auth)/register" asChild>
+                <TouchableOpacity>
+                  <Text style={styles.footerLink}>Create one</Text>
+                </TouchableOpacity>
+              </Link>
+            </View>
           </ScrollView>
         </KeyboardAvoidingView>
       </Animated.View>
@@ -391,22 +248,19 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     alignItems: 'center',
   },
-  brandContainer: {
-    alignItems: 'center',
-  },
   logoWrapper: {
-    width: 70,
-    height: 70,
-    borderRadius: 35,
-    backgroundColor: 'rgba(255,255,255,0.15)',
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: 'rgba(255,255,255,0.12)',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 10,
+    marginBottom: 12,
     borderWidth: 2,
     borderColor: 'rgba(255,255,255,0.1)',
   },
   brandName: {
-    fontSize: 28,
+    fontSize: 32,
     fontWeight: '900',
     color: COLORS.white,
     letterSpacing: -1,
@@ -416,14 +270,11 @@ const styles = StyleSheet.create({
   },
   brandHighlight: {
     color: COLORS.yellow,
-    textShadowColor: 'rgba(0,0,0,0.2)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 2,
   },
   brandSubtitle: {
-    fontSize: 12,
+    fontSize: 13,
     color: 'rgba(255,255,255,0.7)',
-    marginTop: 2,
+    marginTop: 4,
     fontWeight: '500',
   },
   bottomSheet: {
@@ -454,65 +305,59 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     flexGrow: 1,
-    paddingHorizontal: 20,
+    paddingHorizontal: 24,
     paddingBottom: 20,
   },
-  headerContent: {
-    marginTop: 8,
-    marginBottom: 16,
-  },
-  welcomeText: {
+  welcome: {
     fontSize: 24,
     fontWeight: '800',
     color: COLORS.gray900,
-    marginBottom: 2,
+    marginBottom: 4,
   },
-  welcomeSubtext: {
-    fontSize: 13,
+  welcomeSub: {
+    fontSize: 14,
     color: COLORS.gray500,
+    marginBottom: 20,
   },
-  errorContainer: {
+  errorBox: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: COLORS.redLight,
-    borderRadius: 12,
     padding: 12,
-    marginBottom: 12,
+    borderRadius: 10,
+    marginBottom: 16,
     borderWidth: 1,
     borderColor: COLORS.redBorder,
+    gap: 8,
   },
   errorText: {
     flex: 1,
-    fontSize: 13,
     color: COLORS.red,
+    fontSize: 14,
     fontWeight: '600',
-    marginLeft: 8,
-  },
-  errorClose: {
-    padding: 4,
-  },
-  form: {
-    flex: 1,
   },
   inputGroup: {
-    marginBottom: 14,
+    marginBottom: 16,
   },
-  inputLabel: {
-    fontSize: 12,
+  label: {
+    fontSize: 13,
     fontWeight: '700',
     color: COLORS.gray600,
     marginBottom: 6,
-    letterSpacing: 0.5,
   },
   inputWrapper: {
     flexDirection: 'row',
     alignItems: 'center',
     borderWidth: 1.5,
     borderColor: COLORS.gray200,
-    borderRadius: 14,
+    borderRadius: 12,
     paddingHorizontal: 14,
     backgroundColor: COLORS.white,
-    height: 50,
+    height: 52,
+  },
+  inputFilled: {
+    borderColor: COLORS.red,
+    borderWidth: 2,
   },
   input: {
     flex: 1,
@@ -527,107 +372,50 @@ const styles = StyleSheet.create({
   eyeButton: {
     padding: 4,
   },
-  forgotContainer: {
+  forgotButton: {
     alignSelf: 'flex-end',
-    marginBottom: 16,
+    marginBottom: 20,
   },
   forgotText: {
     fontSize: 13,
     color: COLORS.red,
-    fontWeight: '700',
+    fontWeight: '600',
   },
-  signInButton: {
+  loginButton: {
     flexDirection: 'row',
     backgroundColor: COLORS.red,
-    borderRadius: 14,
-    paddingVertical: 15,
-    paddingHorizontal: 20,
+    borderRadius: 12,
+    padding: 16,
     alignItems: 'center',
     justifyContent: 'center',
+    gap: 8,
     shadowColor: COLORS.red,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 8,
     elevation: 5,
-    marginBottom: 16,
   },
   buttonDisabled: {
     opacity: 0.6,
     shadowOpacity: 0.1,
   },
-  signInText: {
+  loginText: {
     color: COLORS.white,
     fontSize: 17,
     fontWeight: '800',
-    marginRight: 8,
   },
-  dividerContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginVertical: 16,
-  },
-  dividerLine: {
-    flex: 1,
-    height: 1,
-    backgroundColor: COLORS.gray200,
-  },
-  dividerText: {
-    fontSize: 12,
-    color: COLORS.gray400,
-    marginHorizontal: 12,
-    fontWeight: '500',
-  },
-  socialContainer: {
-    flexDirection: 'row',
-    gap: 12,
-    marginBottom: 16,
-  },
-  socialButton: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 13,
-    borderRadius: 14,
-    borderWidth: 1.5,
-    borderColor: COLORS.gray200,
-    backgroundColor: COLORS.white,
-  },
-  googleButton: {
-    borderColor: '#EA4335',
-  },
-  facebookButton: {
-    backgroundColor: '#1877F2',
-    borderColor: '#1877F2',
-  },
-  socialText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: COLORS.gray700,
-    marginLeft: 8,
-  },
-  facebookText: {
-    color: COLORS.white,
-  },
-  signUpContainer: {
+  footer: {
     flexDirection: 'row',
     justifyContent: 'center',
-    marginTop: 4,
-  },
-  signUpText: {
-    fontSize: 14,
-    color: COLORS.gray500,
-  },
-  signUpLink: {
-    fontSize: 14,
-    color: COLORS.red,
-    fontWeight: '800',
+    marginTop: 24,
   },
   footerText: {
-    textAlign: 'center',
-    color: COLORS.gray400,
-    fontSize: 11,
-    marginTop: 12,
-    fontWeight: '500',
+    color: COLORS.gray500,
+    fontSize: 14,
+  },
+  footerLink: {
+    color: COLORS.red,
+    fontWeight: '800',
+    fontSize: 14,
   },
 });

@@ -1,19 +1,20 @@
 import { View, Text, ScrollView, StyleSheet, ActivityIndicator } from 'react-native';
-import { useAuth } from '../../hooks/useAuth';
-import { useQueue } from '../../hooks/useQueue';
+import { useQueueContext } from '../../context/QueueContext';
 import { QueueTicketCard } from '../../components/QueueTicketCard';
 import { SectionLabel, EmptyState, Badge } from '../../components/ui';
 import { SafeScreen } from '../../components/SafeScreen';
 import { COLORS, BRAND } from '../../lib/constants';
 import { QueueEntry } from '../../types';
 
+console.log('👤 [Customer MyQueue] Screen mounted');
+
 const STATUS_BADGE: Record<string, 'blue' | 'orange' | 'green' | 'gray'> = {
   waiting: 'blue', serving: 'orange', served: 'green', cancelled: 'gray',
 };
 
-export default function MyQueueScreen() {
-  const { user } = useAuth();
-  const { activeQueue, history, loading, leaveQueue, refreshActive } = useQueue(user?.id);
+export default function CustomerMyQueueScreen() {
+  console.log('👤 [Customer MyQueue] Rendering');
+  const { activeQueue, history, loading, leaveQueue, refreshActive } = useQueueContext();
 
   function formatDate(iso: string) {
     return new Date(iso).toLocaleString('en-PH', {

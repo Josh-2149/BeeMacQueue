@@ -5,6 +5,8 @@ import {
 } from 'react-native';
 import { COLORS } from '../lib/constants';
 
+console.log('🎨 [UI] Module loaded');
+
 // ── Button ────────────────────────────────────────────────────────────────────
 type BtnVariant = 'primary' | 'secondary' | 'outline' | 'yellow' | 'danger' | 'ghost';
 interface BtnProps {
@@ -113,7 +115,10 @@ export function Divider({ label }: { label?: string }) {
 }
 
 // ── SectionLabel ──────────────────────────────────────────────────────────────
-export function SectionLabel({ children }: { children: string }) {
+interface SectionLabelProps {
+  children: React.ReactNode;
+}
+export function SectionLabel({ children }: SectionLabelProps) {
   return (
     <Text style={{ fontSize: 11, fontWeight: '700', color: COLORS.gray400, letterSpacing: 0.8, textTransform: 'uppercase', marginBottom: 10, marginTop: 4 }}>
       {children}
@@ -122,7 +127,8 @@ export function SectionLabel({ children }: { children: string }) {
 }
 
 // ── EmptyState ────────────────────────────────────────────────────────────────
-export function EmptyState({ icon, title, sub }: { icon: string; title: string; sub?: string }) {
+interface EmptyStateProps { icon: string; title: string; sub?: string; }
+export function EmptyState({ icon, title, sub }: EmptyStateProps) {
   return (
     <View style={{ alignItems: 'center', paddingVertical: 40 }}>
       <Text style={{ fontSize: 44, marginBottom: 12 }}>{icon}</Text>
@@ -143,7 +149,8 @@ export function LiveDot() {
 }
 
 // ── ScreenHeader ──────────────────────────────────────────────────────────────
-export function ScreenHeader({ title, subtitle, right }: { title: string; subtitle?: string; right?: React.ReactNode }) {
+interface ScreenHeaderProps { title: string; subtitle?: string; right?: React.ReactNode; }
+export function ScreenHeader({ title, subtitle, right }: ScreenHeaderProps) {
   return (
     <View style={{ backgroundColor: COLORS.red, paddingTop: 56, paddingHorizontal: 20, paddingBottom: 16, flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between' }}>
       <View style={{ flex: 1 }}>

@@ -10,6 +10,7 @@ import {
   Eye,
   EyeSlash,
   WarningCircle,
+  Warning,
   UserCircle,
   CheckCircle,
   House,
@@ -27,18 +28,12 @@ import {
   Star,
   Calendar,
   Check,
-  ChevronLeft,
-  ChevronRight,
   Heart,
   ShoppingBag,
   Coffee,
   Pizza,
   Hamburger,
-  Beer,
-  Music,
-  Film,
   GameController,
-  Wifi,
   Car,
   Bus,
   Train,
@@ -49,6 +44,19 @@ import {
   SignOut,
   CaretDown,
   CaretUp,
+  Tag,
+  Users,
+  Queue,
+  Shield,
+  Pencil,
+  Trash,
+  Info,
+  List,
+  ArrowsClockwise,
+  Target,
+  CaretRight,
+  Rocket,
+  Crown,
 } from 'phosphor-react-native';
 
 console.log('🔵 PhosphorIcon component loaded');
@@ -65,6 +73,7 @@ const iconMap = {
   Eye,
   EyeSlash,
   WarningCircle,
+  Warning,
   UserCircle,
   CheckCircle,
   House,
@@ -82,18 +91,12 @@ const iconMap = {
   Star,
   Calendar,
   Check,
-  ChevronLeft,
-  ChevronRight,
   Heart,
   ShoppingBag,
   Coffee,
   Pizza,
   Hamburger,
-  Beer,
-  Music,
-  Film,
   GameController,
-  Wifi,
   Car,
   Bus,
   Train,
@@ -104,6 +107,20 @@ const iconMap = {
   SignOut,
   CaretDown,
   CaretUp,
+  // Added missing icons
+  Tag,
+  Users,
+  Queue,
+  Shield,
+  Pencil,
+  Trash,
+  Info,
+  List,
+  ArrowsClockwise,
+  Target,
+  CaretRight,
+  Rocket,
+  Crown,
 } as const;
 
 type IconName = keyof typeof iconMap;
@@ -123,7 +140,6 @@ export function PhosphorIcon({
   weight = 'regular',
   style 
 }: PhosphorIconProps) {
-  // Check if icon exists in map
   const IconComponent = iconMap[icon as IconName];
   
   if (!IconComponent) {

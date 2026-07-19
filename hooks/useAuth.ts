@@ -1,239 +1,273 @@
-import { useState, useEffect, useCallback } from 'react';
-import { Session, User } from '@supabase/supabase-js';
+import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
-import { Profile, UserRole, BrandType } from '../types';
+import { Profile } from '../types';
 
-console.log('🔵 useAuth hook initialized');
+console.log('🔐 [useAuth] Module loaded');
 
 export function useAuth() {
-  console.log('🔄 useAuth hook rendering');
-  const [session, setSession] = useState<Session | null>(null);
-  const [user, setUser] = useState<User | null>(null);
+  console.log('🔐 [useAuth] Hook called');
+  
+  const [session, setSession] = useState<any>(null);
+  const [user, setUser] = useState<any>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
-
-  const loadProfile = useCallback(async (userId: string) => {
-    console.log(`📥 Loading profile for user: ${userId}`);
-    try {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', userId)
-        .maybeSingle();
-
-      if (error) {
-        console.log('❌ Error loading profile:', error);
-        setLoading(false);
-        return;
-      }
-
-      if (data) {
-        console.log('✅ Profile loaded from database:', data);
-        setProfile(data as Profile);
-      } else {
-        console.log('🆕 No profile found, creating new profile');
-        const { data: userData } = await supabase.auth.getUser();
-        const meta = userData?.user?.user_metadata ?? {};
-        const newProfile = {
-          id: userId,
-          name: meta.full_name ?? meta.name ?? userData?.user?.email?.split('@')[0] ?? 'User',
-          email: userData?.user?.email ?? '',
-          role: 'customer' as const,
-          brand: meta.brand || null,
-          branch: meta.branch || null,
-          queues_joined: 0,
-        };
-        console.log('📝 Creating profile:', newProfile);
-        const { error: upsertError } = await supabase.from('profiles').upsert(newProfile);
-        if (upsertError) {
-          console.log('❌ Error creating profile:', upsertError);
-        } else {
-          console.log('✅ Profile created successfully');
-        }
-        setProfile(newProfile as Profile);
-      }
-    } catch (err) {
-      console.log('❌ Unexpected error in loadProfile:', err);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const [initialized, setInitialized] = useState(false);
 
   useEffect(() => {
-    console.log('🔄 useAuth useEffect running');
+    console.log('🔐 [useAuth] useEffect START');
     
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      console.log('📊 Session loaded:', session ? 'Active' : 'None');
-      setSession(session);
-      setUser(session?.user ?? null);
-      if (session?.user) {
-        console.log('👤 User found, loading profile');
-        loadProfile(session.user.id);
-      } else {
-        console.log('🚫 No user, setting loading false');
-        setLoading(false);
-      }
-    });
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (_event, session) => {
-        console.log(`🔐 Auth state changed: ${_event}`);
-        setSession(session);
-        setUser(session?.user ?? null);
-        if (session?.user) {
-          console.log('👤 User logged in, loading profile');
-          await loadProfile(session.user.id);
-        } else {
-          console.log('🚫 User logged out');
-          setProfile(null);
+    let isMounted = true;
+    
+    const loadData = async () => {
+      try {
+        console.log('🔐 [useAuth] Getting session...');
+        const { data: { session }, error } = await supabase.auth.getSession();
+        
+        if (error) {
+          console.log('🔐 [useAuth] Session error:', error.message);
+          if (isMounted) {
+            setSession(null);
+            setUser(null);
+            setProfile(null);
+            setLoading(false);
+            setInitialized(true);
+          }
+          return;
+        }
+        
+        console.log('🔐 [useAuth] Session:', session ? `✅ Active (${session.user?.email})` : '❌ None');
+        
+        if (isMounted) {
+          setSession(session);
+          setUser(session?.user || null);
+          
+          if (session?.user) {
+            console.log(`🔐 [useAuth] User found: ${session.user.email}`);
+            console.log(`🔐 [useAuth] User ID: ${session.user.id}`);
+            console.log('🔐 [useAuth] Loading profile...');
+            
+            const { data, error: profileError } = await supabase
+              .from('profiles')
+              .select('*')
+              .eq('id', session.user.id)
+              .maybeSingle();
+            
+            if (profileError) {
+              console.log('🔐 [useAuth] Profile error:', profileError.message);
+            } else {
+              console.log(`🔐 [useAuth] Profile loaded: role=${data?.role || 'none'}, brand=${data?.brand || 'none'}, branch=${data?.branch || 'none'}`);
+              setProfile(data as Profile || null);
+            }
+          } else {
+            console.log('🔐 [useAuth] No user in session');
+            setProfile(null);
+          }
+          
           setLoading(false);
+          setInitialized(true);
+          console.log('🔐 [useAuth] Initial load complete');
+          console.log(`🔐 [useAuth] State: session=${!!session}, user=${!!session?.user}, profile=${!!profile}`);
+        }
+      } catch (err) {
+        console.log('🔐 [useAuth] Load error:', err);
+        if (isMounted) {
+          setLoading(false);
+          setInitialized(true);
         }
       }
+    };
+
+    loadData();
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (event, newSession) => {
+        console.log(`🔐 [useAuth] Auth event: ${event}`);
+        
+        if (!isMounted) return;
+        
+        setSession(newSession);
+        setUser(newSession?.user || null);
+        
+        if (event === 'SIGNED_OUT') {
+          console.log('🔐 [useAuth] User signed out');
+          setProfile(null);
+          setUser(null);
+          setLoading(false);
+          setInitialized(true);
+          return;
+        }
+        
+        if (newSession?.user) {
+          console.log(`🔐 [useAuth] User ${event}: ${newSession.user.email}`);
+          console.log(`🔐 [useAuth] User ID: ${newSession.user.id}`);
+          console.log('🔐 [useAuth] Loading profile after auth change...');
+          
+          const { data, error } = await supabase
+            .from('profiles')
+            .select('*')
+            .eq('id', newSession.user.id)
+            .maybeSingle();
+          
+          if (error) {
+            console.log('🔐 [useAuth] Profile error on auth change:', error.message);
+          } else {
+            console.log(`🔐 [useAuth] Profile updated: role=${data?.role || 'none'}`);
+            setProfile(data as Profile || null);
+          }
+        } else {
+          console.log('🔐 [useAuth] No user in new session');
+          setProfile(null);
+        }
+        
+        setLoading(false);
+        setInitialized(true);
+      }
     );
+
     return () => {
-      console.log('🧹 Cleaning up auth subscription');
+      console.log('🔐 [useAuth] Cleaning up');
+      isMounted = false;
       subscription.unsubscribe();
     };
-  }, [loadProfile]);
+  }, []);
 
-  async function signInEmail(email: string, password: string) {
-    console.log(`🔐 Signing in with email: ${email}`);
+  const signIn = async (email: string, password: string) => {
+    console.log(`🔐 [useAuth] 🔑 Sign in attempt: ${email}`);
     try {
-      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      const { data, error } = await supabase.auth.signInWithPassword({ 
+        email: email.trim(), 
+        password 
+      });
+      
       if (error) {
-        console.log('❌ Sign in error:', error);
-        return false;
+        console.log('🔐 [useAuth] ❌ Sign in error:', error.message);
+        return { success: false, error: error.message };
       }
-      console.log('✅ Sign in successful');
-      return true;
+      
+      console.log(`🔐 [useAuth] ✅ Sign in success: ${data.user?.email}`);
+      console.log(`🔐 [useAuth] User ID: ${data.user?.id}`);
+      return { success: true };
     } catch (err) {
-      console.log('❌ Unexpected sign in error:', err);
-      return false;
+      console.log('🔐 [useAuth] ❌ Sign in exception:', err);
+      return { success: false, error: 'An unexpected error occurred' };
     }
-  }
+  };
 
-  async function signUpEmail(
-    email: string,
-    password: string,
-    name: string,
-    role: UserRole = 'customer',
-    brand?: BrandType,
-    branch?: string
-  ) {
-    console.log(`📝 Signing up user: ${email}, role: ${role}`);
-    if (role === 'staff') {
-      console.log(`🏢 Staff details - Brand: ${brand}, Branch: ${branch}`);
+  const signUp = async (email: string, password: string, name: string, role: string, brand?: string, branch?: string) => {
+    console.log(`🔐 [useAuth] 📝 Sign up attempt: ${email}, role: ${role}`);
+    
+    if (role === 'staff' && (!brand || !branch)) {
+      console.log('🔐 [useAuth] ❌ Staff signup missing brand or branch');
+      return { success: false, error: 'Brand and branch required for staff' };
     }
     
     try {
       const { data, error } = await supabase.auth.signUp({
-        email,
+        email: email.trim(),
         password,
-        options: {
-          data: {
-            name,
-            role,
+        options: { 
+          data: { 
+            name: name.trim(), 
+            role, 
             brand: role === 'staff' ? brand : null,
             branch: role === 'staff' ? branch : null
-          }
-        },
+          } 
+        }
       });
       
       if (error) {
-        console.log('❌ Sign up error:', error);
-        return false;
+        console.log('🔐 [useAuth] ❌ Sign up error:', error.message);
+        return { success: false, error: error.message };
+      }
+
+      if (!data.user) {
+        console.log('🔐 [useAuth] ❌ No user created');
+        return { success: false, error: 'No user created' };
+      }
+
+      console.log(`🔐 [useAuth] ✅ User created: ${data.user.id}`);
+
+      const profileData = {
+        id: data.user.id,
+        name: name.trim(),
+        email: email.trim(),
+        role,
+        brand: role === 'staff' ? brand : null,
+        branch: role === 'staff' ? branch : null,
+        queues_joined: 0,
+      };
+      
+      console.log('🔐 [useAuth] 📝 Creating profile:', profileData);
+      
+      const { error: pe } = await supabase
+        .from('profiles')
+        .insert(profileData);
+      
+      if (pe) {
+        console.log('🔐 [useAuth] ❌ Profile error:', pe.message);
+        const { error: upsertError } = await supabase
+          .from('profiles')
+          .upsert(profileData);
+        
+        if (upsertError) {
+          console.log('🔐 [useAuth] ❌ Upsert also failed:', upsertError.message);
+          return { success: false, error: upsertError.message };
+        }
       }
       
-      if (data.user) {
-        console.log('✅ User created, creating profile');
-        const profileData: any = {
-          id: data.user.id,
-          name,
-          email,
-          role,
-          queues_joined: 0,
-        };
-        
-        if (role === 'staff') {
-          profileData.brand = brand;
-          profileData.branch = branch;
-        }
-        
-        console.log('📝 Profile data:', profileData);
-        const { error: profileError } = await supabase.from('profiles').upsert(profileData);
-        if (profileError) {
-          console.log('❌ Profile creation error:', profileError);
-          return false;
-        }
-        console.log('✅ Profile created successfully');
-      }
-      return true;
+      console.log(`🔐 [useAuth] ✅ Profile created with role: ${role}`);
+      return { success: true };
     } catch (err) {
-      console.log('❌ Unexpected sign up error:', err);
-      return false;
+      console.log('🔐 [useAuth] ❌ Sign up exception:', err);
+      return { success: false, error: 'An unexpected error occurred' };
     }
-  }
+  };
 
-  async function updateProfile(updates: Partial<Pick<Profile, 'name'>>) {
-    if (!user) {
-      console.log('❌ Cannot update profile: No user');
-      return false;
+  const signOut = async () => {
+    console.log('🔐 [useAuth] 🚪 Signing out');
+    try {
+      await supabase.auth.signOut();
+      setProfile(null);
+      setSession(null);
+      setUser(null);
+      console.log('🔐 [useAuth] ✅ Signed out');
+      return { success: true };
+    } catch (err) {
+      console.log('🔐 [useAuth] ❌ Sign out error:', err);
+      return { success: false };
     }
-    console.log(`📝 Updating profile for user: ${user.id}`, updates);
-    const { error } = await supabase
+  };
+
+  const refreshProfile = async () => {
+    if (!session?.user) {
+      console.log('🔐 [useAuth] ⚠️ Cannot refresh profile - no user');
+      return;
+    }
+    
+    console.log('🔐 [useAuth] 🔄 Refreshing profile...');
+    const { data, error } = await supabase
       .from('profiles')
-      .update(updates)
-      .eq('id', user.id);
+      .select('*')
+      .eq('id', session.user.id)
+      .maybeSingle();
+    
     if (error) {
-      console.log('❌ Profile update error:', error);
-      return false;
+      console.log('🔐 [useAuth] ❌ Refresh error:', error.message);
+    } else {
+      console.log(`🔐 [useAuth] ✅ Profile refreshed: role=${data?.role || 'none'}`);
+      setProfile(data as Profile || null);
     }
-    setProfile((prev) => prev ? { ...prev, ...updates } : prev);
-    console.log('✅ Profile updated successfully');
-    return true;
-  }
+  };
 
-  async function updatePassword(newPassword: string) {
-    console.log('🔐 Updating password');
-    const { error } = await supabase.auth.updateUser({ password: newPassword });
-    if (error) {
-      console.log('❌ Password update error:', error);
-      return false;
-    }
-    console.log('✅ Password updated successfully');
-    return true;
-  }
-
-  async function resetPassword(email: string) {
-    console.log(`📧 Sending password reset for: ${email}`);
-    const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: 'beemacqueue://auth/reset',
-    });
-    if (error) {
-      console.log('❌ Password reset error:', error);
-      return false;
-    }
-    console.log('✅ Password reset email sent');
-    return true;
-  }
-
-  async function signOut() {
-    console.log('🚪 Signing out');
-    await supabase.auth.signOut();
-    setProfile(null);
-    console.log('✅ Signed out successfully');
-  }
-
-  return {
-    session,
+  return { 
+    session, 
     user,
-    profile,
-    loading,
-    signInEmail,
-    signUpEmail,
+    profile, 
+    loading, 
+    initialized,
+    signIn, 
+    signUp, 
     signOut,
-    updateProfile,
-    updatePassword,
-    resetPassword,
+    refreshProfile
   };
 }

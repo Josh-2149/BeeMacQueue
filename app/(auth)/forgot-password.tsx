@@ -9,7 +9,7 @@ import { supabase } from '../../lib/supabase';
 import { COLORS } from '../../lib/constants';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { PhosphorIcon } from '../../components/PhosphorIcon';
-import { ArrowLeft, Envelope, Key } from 'phosphor-react-native';
+import { StatusBar } from 'expo-status-bar';
 
 export default function ForgotPasswordScreen() {
   const router = useRouter();

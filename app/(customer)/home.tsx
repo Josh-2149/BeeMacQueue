@@ -1,11 +1,12 @@
-import { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View, Text, ScrollView, StyleSheet,
   RefreshControl, Alert,
 } from 'react-native';
+import { useRouter } from 'expo-router';
 import { useAuth } from '../../hooks/useAuth';
 import { useEstablishments } from '../../hooks/useEstablishments';
-import { useQueue } from '../../hooks/useQueue';
+import { useQueueContext } from '../../context/QueueContext';
 import { EstablishmentCard } from '../../components/EstablishmentCard';
 import { QueueTicketCard } from '../../components/QueueTicketCard';
 import { JoinModal } from '../../components/JoinModal';
@@ -15,14 +16,18 @@ import { SafeScreen } from '../../components/SafeScreen';
 import { COLORS } from '../../lib/constants';
 import { Establishment } from '../../types';
 
+console.log('🏠 [Customer Home] Screen mounted');
+
 const FILTERS = [
-  { key: 'all',      label: 'All Branches' },
+  { key: 'all', label: 'All Branches' },
   { key: 'jollibee', label: '🐝 Jollibee' },
-  { key: 'mcdo',     label: "🍟 McDonald's" },
-  { key: 'open',     label: '✅ Open Now' },
+  { key: 'mcdo', label: "🍟 McDonald's" },
+  { key: 'open', label: '✅ Open Now' },
 ];
 
-export default function HomeScreen() {
+export default function CustomerHomeScreen() {
+  console.log('🏠 [Customer Home] Rendering');
+  const router = useRouter();
   const { user, profile } = useAuth();
   const {
     establishments, totalInQueue, avgWait,
@@ -31,11 +36,18 @@ export default function HomeScreen() {
   const {
     activeQueue, joining,
     joinQueue, leaveQueue, refreshActive,
-  } = useQueue(user?.id);
+  } = useQueueContext();  // ← USE CONTEXT INSTEAD
 
   const [filter, setFilter] = useState('all');
   const [selectedEst, setSelectedEst] = useState<Establishment | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+
+  useEffect(() => {
+    if (profile?.role === 'staff') {
+      console.log('🏠 [Customer Home] Staff user, redirecting to staff dashboard');
+      router.replace('/(staff)/dashboard');
+    }
+  }, [profile]);
 
   const filtered = establishments.filter((e) => {
     if (filter === 'jollibee') return e.brand === 'jollibee';
@@ -76,6 +88,16 @@ export default function HomeScreen() {
     if (h < 17) return 'Good afternoon';
     return 'Good evening';
   };
+
+  if (profile?.role === 'staff') {
+    return (
+      <SafeScreen style={styles.container}>
+        <View style={styles.loadingContainer}>
+          <Text style={styles.loadingText}>Redirecting to dashboard...</Text>
+        </View>
+      </SafeScreen>
+    );
+  }
 
   return (
     <SafeScreen style={styles.container}>
@@ -168,6 +190,15 @@ export default function HomeScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.bg },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    fontSize: 16,
+    color: COLORS.gray500,
+  },
   header: {
     backgroundColor: COLORS.red, paddingTop: 56, paddingHorizontal: 20,
     paddingBottom: 16, flexDirection: 'row',

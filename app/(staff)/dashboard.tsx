@@ -1,7 +1,16 @@
+// app/(staff)/dashboard.tsx
 import React, { useState, useEffect } from 'react';
 import {
-  View, Text, ScrollView, StyleSheet, RefreshControl,
-  TouchableOpacity, ActivityIndicator, Alert, Modal, TextInput,
+  View,
+  Text,
+  ScrollView,
+  StyleSheet,
+  RefreshControl,
+  TouchableOpacity,
+  ActivityIndicator,
+  Alert,
+  Modal,
+  TextInput,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuth } from '../../hooks/useAuth';
@@ -43,6 +52,7 @@ export default function StaffDashboardScreen() {
     servingList,
     servedList,
     queueTemplates,
+    queues,
     stats,
     establishment,
     loading: queueLoading,
@@ -115,9 +125,9 @@ export default function StaffDashboardScreen() {
 
     const result = await createQueue({
       name: queueName.trim(),
-      estimatedWait: parseInt(estimatedWait) || 15,
+      description: '',
+      estimated_wait_mins: parseInt(estimatedWait) || 15,
       capacity: parseInt(capacity) || 50,
-      status: 'active',
     });
 
     if (result.success) {
@@ -127,19 +137,20 @@ export default function StaffDashboardScreen() {
       setEstimatedWait('15');
       setCapacity('50');
 
-      console.log('🔔 Sending notification for queue creation');
-      await addNotification({
-        user_id: profile?.id || '',
-        title: '📋 New Queue Created!',
-        message: `Queue "${queueName.trim()}" has been opened and is ready for customers. (${capacity} capacity, ~${estimatedWait}min wait)`,
-        type: 'queue',
-        priority: 'high',
-        metadata: {
-          queue_name: queueName.trim(),
-          estimated_wait: parseInt(estimatedWait) || 15,
-          capacity: parseInt(capacity) || 50,
-        }
-      });
+      if (profile?.id) {
+        await addNotification({
+          user_id: profile.id,
+          title: '📋 New Queue Created!',
+          message: `Queue "${queueName.trim()}" has been opened and is ready for customers.`,
+          type: 'queue',
+          priority: 'high',
+          metadata: {
+            queue_name: queueName.trim(),
+            estimated_wait: parseInt(estimatedWait) || 15,
+            capacity: parseInt(capacity) || 50,
+          }
+        });
+      }
 
       await refresh();
       await getQueues();
@@ -170,15 +181,6 @@ export default function StaffDashboardScreen() {
     if (selectedTab === 'waiting') return 'Waiting Queue';
     if (selectedTab === 'serving') return 'Currently Serving';
     return 'Completed Customers';
-  };
-
-  const getTemplateIcon = (name: string) => {
-    const lower = name.toLowerCase();
-    if (lower.includes('vip')) return 'Star';
-    if (lower.includes('express')) return 'Rocket';
-    if (lower.includes('regular')) return 'Users';
-    if (lower.includes('priority')) return 'Crown';
-    return 'Queue';
   };
 
   const formatDate = (iso: string) => {
@@ -268,24 +270,17 @@ export default function StaffDashboardScreen() {
                 </Text>
 
                 {queueTemplates.map((template: any) => {
-                  const notes = template.metadata || {};
-                  const name = notes.name || template.name || 'Unnamed Queue';
-                  const icon = getTemplateIcon(name);
-                  const creatorName = notes.created_by_name || template.creator_name || template.user?.name || 'Unknown Staff';
-                  const isActive = notes.status === 'active' || notes.status === undefined;
+                  const name = template.name || 'Unnamed Queue';
+                  const isActive = template.is_active !== false;
 
                   return (
                     <View key={template.id} style={styles.templateCard}>
                       <View style={styles.templateCardHeader}>
                         <View style={styles.templateIconContainer}>
-                          <PhosphorIcon icon={icon as any} size={18} color={COLORS.blue} weight="bold" />
+                          <PhosphorIcon icon="Queue" size={18} color={COLORS.blue} weight="bold" />
                         </View>
                         <View style={styles.templateInfo}>
                           <Text style={styles.templateName}>{name}</Text>
-                          <View style={styles.templateMetaRow}>
-                            <PhosphorIcon icon="User" size={10} color={COLORS.gray400} weight="bold" />
-                            <Text style={styles.templateCreator}> Created by {creatorName}</Text>
-                          </View>
                           <View style={styles.templateMetaRow}>
                             <PhosphorIcon icon="Calendar" size={10} color={COLORS.gray400} weight="bold" />
                             <Text style={styles.templateDate}> {formatDate(template.created_at)}</Text>
@@ -302,11 +297,11 @@ export default function StaffDashboardScreen() {
                       <View style={styles.templateDetails}>
                         <View style={styles.templateDetail}>
                           <PhosphorIcon icon="Clock" size={12} color={COLORS.gray400} weight="bold" />
-                          <Text style={styles.templateDetailText}>{notes.estimatedWait || 15} min wait</Text>
+                          <Text style={styles.templateDetailText}>{template.estimated_wait_mins || 15} min wait</Text>
                         </View>
                         <View style={styles.templateDetail}>
                           <PhosphorIcon icon="Users" size={12} color={COLORS.gray400} weight="bold" />
-                          <Text style={styles.templateDetailText}>{notes.capacity || 50} capacity</Text>
+                          <Text style={styles.templateDetailText}>{template.capacity || 50} capacity</Text>
                         </View>
                       </View>
 
@@ -368,13 +363,12 @@ export default function StaffDashboardScreen() {
           </View>
         ) : (
           currentList.map((entry) => {
+            const queueName = queues.find((q) => q.id === entry.queue_id)?.name || '';
             let queueIcon = 'Clock';
-            const notes = entry.notes ? JSON.parse(entry.notes) : {};
-            const name = notes.name || '';
-            if (name.toLowerCase().includes('vip')) queueIcon = 'Star';
-            else if (name.toLowerCase().includes('express')) queueIcon = 'Rocket';
-            else if (name.toLowerCase().includes('regular')) queueIcon = 'Users';
-            else if (name.toLowerCase().includes('priority')) queueIcon = 'Crown';
+            if (queueName.toLowerCase().includes('vip')) queueIcon = 'Star';
+            else if (queueName.toLowerCase().includes('express')) queueIcon = 'Rocket';
+            else if (queueName.toLowerCase().includes('regular')) queueIcon = 'Users';
+            else if (queueName.toLowerCase().includes('priority')) queueIcon = 'Crown';
 
             return (
               <StaffQueueCard
@@ -644,10 +638,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     marginTop: 1,
-  },
-  templateCreator: {
-    fontSize: 9,
-    color: COLORS.gray500,
   },
   templateDate: {
     fontSize: 9,

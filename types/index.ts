@@ -1,3 +1,4 @@
+// types/index.ts
 export type UserRole = 'customer' | 'staff' | 'admin';
 export type QueueStatus = 'waiting' | 'called' | 'serving' | 'completed' | 'cancelled' | 'no_show';
 export type BrandType = 'jollibee' | 'mcdo';
@@ -7,8 +8,8 @@ export interface Profile {
   name: string;
   email: string;
   role: UserRole;
-  brand?: BrandType;
-  branch?: string;
+  brand?: string;           // Changed from BrandType | null to string
+  branch?: string;          // Changed from string | null to string
   staff_id?: string;
   phone_number?: string;
   queues_joined: number;
@@ -35,10 +36,25 @@ export interface Establishment {
   phone_number?: string;
 }
 
+export interface Queue {
+  id: string;
+  establishment_id: string;
+  name: string;
+  description?: string;
+  capacity?: number;
+  estimated_wait_mins?: number;
+  is_active?: boolean;
+  created_at?: string;
+  waitingCount?: number;
+  servingCount?: number;
+  establishment?: Establishment;
+}
+
 export interface QueueEntry {
   id: string;
   user_id: string;
-  establishment_id: string;
+  queue_id: string;
+  establishment_id?: string;
   ticket_number: number;
   status: QueueStatus;
   created_at: string;
@@ -52,8 +68,9 @@ export interface QueueEntry {
   notes?: string;
   party_size?: number;
   table_number?: string;
-  establishment?: Establishment;
+  queue?: Queue;
   user?: Profile;
+  establishment?: Establishment;
 }
 
 export interface AppNotification {

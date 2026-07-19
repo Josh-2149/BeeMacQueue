@@ -1,147 +1,176 @@
+// app/(staff)/my-queue.tsx
 import React, { useState, useEffect } from 'react';
 import {
-  View, Text, ScrollView, StyleSheet, RefreshControl,
-  TouchableOpacity, ActivityIndicator, Alert, Modal, TextInput
+  View,
+  Text,
+  ScrollView,
+  StyleSheet,
+  RefreshControl,
+  TouchableOpacity,
+  Alert,
+  ActivityIndicator,
+  Modal,
+  TextInput,
+  KeyboardAvoidingView,
+  Platform,
+  TouchableWithoutFeedback,
+  Keyboard,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuth } from '../../hooks/useAuth';
 import { useStaffQueueContext } from '../../context/StaffQueueContext';
 import { SafeScreen } from '../../components/SafeScreen';
 import { StaffHeader } from '../../components/StaffHeader';
+import { StaffQueueCard } from '../../components/StaffQueueCard';
+import { SectionLabel } from '../../components/ui';
 import { COLORS } from '../../lib/constants';
-import { PhosphorIcon } from '../../components/PhosphorIcon';
+import { Ionicons } from '@expo/vector-icons';
 
 console.log('🏪 [Staff MyQueue] Screen mounted');
-
-type FilterType = 'all' | 'active' | 'paused';
 
 export default function StaffMyQueueScreen() {
   console.log('🏪 [Staff MyQueue] Rendering');
   const router = useRouter();
   const { profile, loading: authLoading } = useAuth();
   const [refreshing, setRefreshing] = useState(false);
-  const [queues, setQueues] = useState<any[]>([]);
-  const [filteredQueues, setFilteredQueues] = useState<any[]>([]);
-  const [loadingQueues, setLoadingQueues] = useState(true);
-  const [filter, setFilter] = useState<FilterType>('all');
-
+  const [selectedQueue, setSelectedQueue] = useState<string | 'all'>('all');
   const [showEditModal, setShowEditModal] = useState(false);
   const [editingQueue, setEditingQueue] = useState<any>(null);
   const [editName, setEditName] = useState('');
-  const [editWait, setEditWait] = useState('');
   const [editCapacity, setEditCapacity] = useState('');
-
-  const [showDeleteModal, setShowDeleteModal] = useState(false);
-  const [deletingQueue, setDeletingQueue] = useState<any>(null);
+  const [editWait, setEditWait] = useState('');
 
   const {
-    getQueues,
+    waitingList,
+    servingList,
+    servedList,
+    queues,
+    stats,
+    establishment,
+    loading: queueLoading,
+    processing,
+    error,
+    serveNext,
+    markServed,
+    callCustomer,
+    cancelCustomer,
+    refresh,
     updateQueue,
     deleteQueue,
-    refresh,
-    loading,
-    error,
   } = useStaffQueueContext();
 
   useEffect(() => {
-    if (!authLoading && profile) {
-      loadQueues();
+    if (!authLoading && profile && profile.role !== 'staff') {
+      console.log('🏪 [Staff MyQueue] 🚫 Not staff, redirecting');
+      Alert.alert('Access Denied', 'Staff only area');
+      router.replace('/(customer)/home');
     }
-  }, [authLoading, profile]);
-
-  useEffect(() => {
-    filterQueues();
-  }, [queues, filter]);
-
-  const loadQueues = async () => {
-    setLoadingQueues(true);
-    const result = await getQueues();
-    if (result.success) {
-      setQueues(result.data);
-    }
-    setLoadingQueues(false);
-  };
-
-  const filterQueues = () => {
-    if (filter === 'all') {
-      setFilteredQueues(queues);
-    } else {
-      setFilteredQueues(queues.filter(q => q.metadata?.status === filter));
-    }
-  };
+  }, [profile, authLoading]);
 
   const onRefresh = async () => {
     setRefreshing(true);
     await refresh();
-    await loadQueues();
     setRefreshing(false);
   };
 
+  const handleServeNext = async (queueId?: string) => {
+    const success = await serveNext(queueId);
+    if (!success) {
+      Alert.alert('No Waiting Customers', 'There are no customers in the waiting queue.');
+    }
+  };
+
+  const handleMarkServed = (entryId: string) => {
+    Alert.alert(
+      'Mark as Served',
+      'Confirm this customer has been served?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Confirm', style: 'default', onPress: () => markServed(entryId) },
+      ]
+    );
+  };
+
+  const handleCancelCustomer = (entryId: string) => {
+    Alert.alert(
+      'Remove Customer',
+      'Are you sure you want to remove this customer from the queue?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Remove', style: 'destructive', onPress: () => cancelCustomer(entryId) },
+      ]
+    );
+  };
+
+  const handleCallCustomer = (entryId: string) => {
+    callCustomer(entryId);
+    Alert.alert('✅ Customer Called', 'Notification has been sent to the customer.');
+  };
+
   const handleEditQueue = (queue: any) => {
-    const metadata = queue.metadata || {};
     setEditingQueue(queue);
-    setEditName(metadata.name || '');
-    setEditWait(String(metadata.estimatedWait || 15));
-    setEditCapacity(String(metadata.capacity || 50));
+    setEditName(queue.name || '');
+    setEditCapacity(String(queue.capacity || 50));
+    setEditWait(String(queue.estimated_wait_mins || 15));
     setShowEditModal(true);
   };
 
-  const handleUpdateQueue = async () => {
-    if (!editName.trim() || !editingQueue) return;
+  const handleSaveEdit = async () => {
+    if (!editName.trim()) {
+      Alert.alert('Error', 'Please enter a queue name');
+      return;
+    }
 
     const result = await updateQueue(editingQueue.id, {
       name: editName.trim(),
-      estimatedWait: parseInt(editWait) || 15,
       capacity: parseInt(editCapacity) || 50,
+      estimated_wait_mins: parseInt(editWait) || 15,
     });
 
     if (result.success) {
-      Alert.alert('✅ Updated', 'Queue updated successfully!');
+      Alert.alert('✅ Queue Updated', `"${editName}" has been updated.`);
       setShowEditModal(false);
-      await loadQueues();
+      setEditingQueue(null);
+      Keyboard.dismiss();
+      await refresh();
     } else {
       Alert.alert('Error', result.error || 'Failed to update queue');
     }
   };
 
   const handleDeleteQueue = (queue: any) => {
-    setDeletingQueue(queue);
-    setShowDeleteModal(true);
+    Alert.alert(
+      'Delete Queue',
+      `Are you sure you want to delete "${queue.name}"? This will remove it from customer view.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Delete', style: 'destructive', onPress: async () => {
+          const result = await deleteQueue(queue.id);
+          if (result.success) {
+            Alert.alert('✅ Queue Deleted', `"${queue.name}" has been deleted.`);
+            await refresh();
+          } else {
+            Alert.alert('Error', result.error || 'Failed to delete queue');
+          }
+        }},
+      ]
+    );
   };
 
-  const confirmDelete = async () => {
-    if (!deletingQueue) return;
-
-    const result = await deleteQueue(deletingQueue.id);
-    if (result.success) {
-      Alert.alert('🗑️ Deleted', 'Queue removed successfully');
-      setShowDeleteModal(false);
-      await loadQueues();
-    } else {
-      Alert.alert('Error', result.error || 'Failed to delete queue');
+  const getFilteredList = () => {
+    if (selectedQueue === 'all') {
+      return waitingList;
     }
-    setDeletingQueue(null);
+    return waitingList.filter((entry) => entry.queue_id === selectedQueue);
   };
 
-  function formatDate(iso: string) {
-    const d = new Date(iso);
-    return d.toLocaleDateString('en-PH', {
-      month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit',
-    });
-  }
-
-  const getFilterCount = (status: FilterType) => {
-    if (status === 'all') return queues.length;
-    return queues.filter(q => q.metadata?.status === status).length;
-  };
-
-  if (authLoading || loading || loadingQueues) {
+  if (authLoading || queueLoading) {
     return (
       <SafeScreen style={styles.container}>
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={COLORS.red} />
           <Text style={styles.loadingText}>
-            {authLoading ? 'Loading profile...' : 'Loading queues...'}
+            {authLoading ? 'Loading profile...' : 'Loading queue data...'}
           </Text>
           {error && <Text style={styles.errorText}>{error}</Text>}
         </View>
@@ -153,7 +182,7 @@ export default function StaffMyQueueScreen() {
     return (
       <SafeScreen style={styles.container}>
         <View style={styles.accessDenied}>
-          <PhosphorIcon icon="Warning" size={64} color={COLORS.red} />
+          <Ionicons name="warning-outline" size={64} color={COLORS.red} />
           <Text style={styles.accessTitle}>Access Denied</Text>
           <Text style={styles.accessSub}>Staff only area</Text>
           <TouchableOpacity style={styles.accessButton} onPress={() => router.replace('/(customer)/home')}>
@@ -164,254 +193,259 @@ export default function StaffMyQueueScreen() {
     );
   }
 
+  const filteredList = getFilteredList();
+
   return (
     <SafeScreen style={styles.container}>
       <StaffHeader
-        title="My Queues"
-        subtitle="Manage your created queues"
+        title="My Queue"
+        subtitle={`${establishment?.name || 'No branch'} · ${establishment?.branch || ''}\n${profile.name}`}
       />
-
-      <View style={styles.filterContainer}>
-        <TouchableOpacity
-          style={[styles.filterTab, filter === 'all' && styles.filterTabActive]}
-          onPress={() => setFilter('all')}
-        >
-          <Text style={[styles.filterText, filter === 'all' && styles.filterTextActive]}>
-            All ({getFilterCount('all')})
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.filterTab, filter === 'active' && styles.filterTabActive]}
-          onPress={() => setFilter('active')}
-        >
-          <Text style={[styles.filterText, filter === 'active' && styles.filterTextActive]}>
-            Active ({getFilterCount('active')})
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.filterTab, filter === 'paused' && styles.filterTabActive]}
-          onPress={() => setFilter('paused')}
-        >
-          <Text style={[styles.filterText, filter === 'paused' && styles.filterTextActive]}>
-            Paused ({getFilterCount('paused')})
-          </Text>
-        </TouchableOpacity>
-      </View>
 
       <ScrollView
         style={styles.scroll}
         contentContainerStyle={styles.content}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={COLORS.red} />
-        }
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={COLORS.red} />}
         showsVerticalScrollIndicator={false}
       >
-        {filteredQueues.length === 0 ? (
-          <View style={styles.emptyContainer}>
-            <PhosphorIcon icon="Queue" size={40} color={COLORS.gray300} />
-            <Text style={styles.emptyTitle}>No Queues Found</Text>
-            <Text style={styles.emptySub}>
-              {filter === 'all' ? 'Create your first queue from Dashboard' : `No ${filter} queues`}
-            </Text>
-            {filter === 'all' && (
+        {/* Queue Statistics */}
+        <View style={styles.statsRow}>
+          <View style={styles.statCard}>
+            <Text style={styles.statNumber}>{stats.totalWaiting}</Text>
+            <Text style={styles.statLabel}>Waiting</Text>
+          </View>
+          <View style={styles.statCard}>
+            <Text style={styles.statNumber}>{stats.totalServing}</Text>
+            <Text style={styles.statLabel}>Serving</Text>
+          </View>
+          <View style={styles.statCard}>
+            <Text style={styles.statNumber}>{stats.totalServed}</Text>
+            <Text style={styles.statLabel}>Served Today</Text>
+          </View>
+        </View>
+
+        {/* Queue List - All queues for this branch */}
+        {queues && queues.length > 0 && (
+          <View style={styles.queuesSection}>
+            <Text style={styles.sectionTitle}>Manage Queues</Text>
+            {queues.map((q) => {
+              const waitingCount = waitingList.filter((e) => e.queue_id === q.id).length;
+              return (
+                <View key={q.id} style={styles.queueItem}>
+                  <View style={styles.queueItemLeft}>
+                    <Text style={styles.queueItemName}>{q.name}</Text>
+                    <Text style={styles.queueItemMeta}>
+                      {waitingCount} waiting · ~{q.estimated_wait_mins || 15}min · {q.capacity || 50} cap
+                    </Text>
+                  </View>
+                  <View style={styles.queueItemActions}>
+                    <TouchableOpacity
+                      style={[styles.actionBtn, styles.editBtn]}
+                      onPress={() => handleEditQueue(q)}
+                    >
+                      <Ionicons name="pencil-outline" size={16} color={COLORS.blue} />
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.actionBtn, styles.deleteBtn]}
+                      onPress={() => handleDeleteQueue(q)}
+                    >
+                      <Ionicons name="trash-outline" size={16} color={COLORS.red} />
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              );
+            })}
+          </View>
+        )}
+
+        {/* Queue Selector */}
+        {queues && queues.length > 0 && (
+          <View style={styles.queueSelector}>
+            <Text style={styles.queueSelectorLabel}>Filter by Queue:</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.queueSelectorScroll}>
               <TouchableOpacity
-                style={styles.createQueueBtn}
-                onPress={() => router.push('/(staff)/dashboard')}
+                style={[styles.queueChip, selectedQueue === 'all' && styles.queueChipActive]}
+                onPress={() => setSelectedQueue('all')}
               >
-                <PhosphorIcon icon="Plus" size={14} color={COLORS.white} weight="bold" />
-                <Text style={styles.createQueueBtnText}>Go to Dashboard</Text>
+                <Text style={[styles.queueChipText, selectedQueue === 'all' && styles.queueChipTextActive]}>
+                  All ({waitingList.length})
+                </Text>
               </TouchableOpacity>
-            )}
+              {queues.map((q) => {
+                const count = waitingList.filter((e) => e.queue_id === q.id).length;
+                return (
+                  <TouchableOpacity
+                    key={q.id}
+                    style={[styles.queueChip, selectedQueue === q.id && styles.queueChipActive]}
+                    onPress={() => setSelectedQueue(q.id)}
+                  >
+                    <Text style={[styles.queueChipText, selectedQueue === q.id && styles.queueChipTextActive]}>
+                      {q.name} ({count})
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          </View>
+        )}
+
+        <SectionLabel>
+          {selectedQueue === 'all' ? 'All Waiting Customers' : `Waiting for "${queues.find(q => q.id === selectedQueue)?.name || 'Queue'}"`}
+        </SectionLabel>
+
+        {filteredList.length === 0 ? (
+          <View style={styles.emptyContainer}>
+            <Ionicons name="people-outline" size={48} color={COLORS.gray300} />
+            <Text style={styles.emptyTitle}>No waiting customers</Text>
+            <Text style={styles.emptySub}>
+              {selectedQueue === 'all'
+                ? 'All caught up! No one is waiting.'
+                : 'This queue is empty.'}
+            </Text>
           </View>
         ) : (
-          filteredQueues.map((queue) => {
-            const metadata = queue.metadata || {};
-            const creatorName = queue.creator_name || metadata.created_by_name || (queue.user as any)?.name || 'Unknown Staff';
-
+          filteredList.map((entry) => {
+            const queueName = queues.find((q) => q.id === entry.queue_id)?.name || 'Unknown';
             return (
-              <View key={queue.id} style={styles.queueCard}>
-                <View style={styles.queueHeader}>
-                  <View style={styles.queueHeaderLeft}>
-                    <View style={styles.queueIcon}>
-                      <PhosphorIcon icon="Queue" size={14} color={COLORS.red} weight="bold" />
-                    </View>
-                    <View>
-                      <Text style={styles.queueName}>{metadata.name || 'Unnamed Queue'}</Text>
-                      <Text style={styles.queueDate}>Created {formatDate(queue.created_at)}</Text>
-                      <Text style={styles.queueCreator}>
-                        <PhosphorIcon icon="User" size={10} color={COLORS.gray400} weight="bold" />
-                        {' '}by {creatorName}
-                      </Text>
-                    </View>
-                  </View>
-                  <View style={styles.queueActions}>
-                    <TouchableOpacity
-                      style={styles.queueActionBtn}
-                      onPress={() => handleEditQueue(queue)}
-                    >
-                      <PhosphorIcon icon="Pencil" size={14} color={COLORS.blue} weight="bold" />
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={[styles.queueActionBtn, styles.deleteActionBtn]}
-                      onPress={() => handleDeleteQueue(queue)}
-                    >
-                      <PhosphorIcon icon="Trash" size={14} color={COLORS.red} weight="bold" />
-                    </TouchableOpacity>
-                  </View>
-                </View>
-
-                <View style={styles.queueStats}>
-                  <View style={styles.queueStat}>
-                    <PhosphorIcon icon="Clock" size={11} color={COLORS.gray400} />
-                    <Text style={styles.queueStatText}>
-                      {metadata.estimatedWait || 15} min
-                    </Text>
-                  </View>
-                  <View style={styles.queueStat}>
-                    <PhosphorIcon icon="Users" size={11} color={COLORS.gray400} />
-                    <Text style={styles.queueStatText}>
-                      {metadata.capacity || 50}
-                    </Text>
-                  </View>
-                  <View style={[styles.queueStat, styles.queueStatusBadge]}>
-                    <View style={[styles.statusDot, { backgroundColor: metadata.status === 'active' ? COLORS.green : COLORS.gray400 }]} />
-                    <Text style={styles.queueStatText}>
-                      {metadata.status === 'active' ? 'Active' : 'Paused'}
-                    </Text>
-                  </View>
-                </View>
-              </View>
+              <StaffQueueCard
+                key={entry.id}
+                entry={entry}
+                queueName={queueName}
+                onServe={() => handleServeNext(entry.queue_id)}
+                onCall={() => handleCallCustomer(entry.id)}
+                onCancel={() => handleCancelCustomer(entry.id)}
+                onMarkServed={() => handleMarkServed(entry.id)}
+                showActions={true}
+              />
             );
           })
         )}
+
+        {/* Quick Serve Button */}
+        {filteredList.length > 0 && (
+          <TouchableOpacity
+            style={styles.serveButton}
+            onPress={() => handleServeNext(selectedQueue === 'all' ? undefined : selectedQueue)}
+            disabled={processing}
+          >
+            <Ionicons name="arrow-forward" size={20} color={COLORS.white} />
+            <Text style={styles.serveButtonText}>
+              {processing ? 'Serving...' : 'Serve Next Customer'}
+            </Text>
+          </TouchableOpacity>
+        )}
+
+        <View style={styles.footer}>
+          <Text style={styles.footerText}>BeeMacQueue CDO · Staff Portal</Text>
+          <Text style={styles.footerSub}>Real-time queue management</Text>
+        </View>
       </ScrollView>
 
-      {/* Edit Queue Bottom Sheet */}
+      {/* Edit Queue Modal - FIXED with keyboard handling */}
       <Modal
         visible={showEditModal}
         transparent={true}
         animationType="slide"
-        onRequestClose={() => setShowEditModal(false)}
+        onRequestClose={() => {
+          setShowEditModal(false);
+          Keyboard.dismiss();
+        }}
       >
-        <View style={styles.modalOverlay}>
-          <TouchableOpacity
-            style={styles.modalBackdrop}
-            activeOpacity={1}
-            onPress={() => setShowEditModal(false)}
-          />
-          <View style={styles.modalSheet}>
-            <View style={styles.modalHandle}>
-              <View style={styles.modalHandleBar} />
-            </View>
-
-            <View style={styles.modalHeader}>
-              <View style={styles.modalHeaderIconEdit}>
-                <PhosphorIcon icon="Pencil" size={18} color={COLORS.white} weight="bold" />
-              </View>
-              <Text style={styles.modalTitle}>Edit Queue</Text>
-              <TouchableOpacity
-                style={styles.modalClose}
-                onPress={() => setShowEditModal(false)}
-              >
-                <PhosphorIcon icon="X" size={18} color={COLORS.gray400} />
-              </TouchableOpacity>
-            </View>
-
-            <View style={styles.modalBody}>
-              <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>Queue Name</Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder="Queue name"
-                  placeholderTextColor={COLORS.gray400}
-                  value={editName}
-                  onChangeText={setEditName}
-                />
-              </View>
-
-              <View style={styles.inputRow}>
-                <View style={[styles.inputGroup, { flex: 1, marginRight: 6 }]}>
-                  <Text style={styles.inputLabel}>Est. Wait (mins)</Text>
-                  <TextInput
-                    style={styles.input}
-                    placeholder="15"
-                    placeholderTextColor={COLORS.gray400}
-                    value={editWait}
-                    onChangeText={setEditWait}
-                    keyboardType="numeric"
-                  />
+        <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+          <View style={styles.modalOverlay}>
+            <TouchableOpacity
+              style={styles.modalBackdrop}
+              activeOpacity={1}
+              onPress={() => {
+                setShowEditModal(false);
+                Keyboard.dismiss();
+              }}
+            />
+            <KeyboardAvoidingView
+              behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+              style={styles.keyboardAvoidingView}
+              keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
+            >
+              <View style={styles.modalSheet}>
+                <View style={styles.modalHandle}>
+                  <View style={styles.modalHandleBar} />
                 </View>
 
-                <View style={[styles.inputGroup, { flex: 1, marginLeft: 6 }]}>
-                  <Text style={styles.inputLabel}>Capacity</Text>
-                  <TextInput
-                    style={styles.input}
-                    placeholder="50"
-                    placeholderTextColor={COLORS.gray400}
-                    value={editCapacity}
-                    onChangeText={setEditCapacity}
-                    keyboardType="numeric"
-                  />
-                </View>
-              </View>
-
-              <TouchableOpacity
-                style={[styles.modalUpdateBtn]}
-                onPress={handleUpdateQueue}
-                activeOpacity={0.8}
-              >
-                <Text style={styles.modalUpdateBtnText}>Update Queue</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
-
-      {/* Delete Confirmation Bottom Sheet */}
-      <Modal
-        visible={showDeleteModal}
-        transparent={true}
-        animationType="slide"
-        onRequestClose={() => setShowDeleteModal(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <TouchableOpacity
-            style={styles.modalBackdrop}
-            activeOpacity={1}
-            onPress={() => setShowDeleteModal(false)}
-          />
-          <View style={styles.modalSheet}>
-            <View style={styles.modalHandle}>
-              <View style={styles.modalHandleBar} />
-            </View>
-
-            <View style={styles.deleteContent}>
-              <View style={styles.deleteIcon}>
-                <PhosphorIcon icon="Trash" size={28} color={COLORS.red} weight="bold" />
-              </View>
-              <Text style={styles.deleteTitle}>Delete Queue?</Text>
-              <Text style={styles.deleteSub}>
-                This will permanently remove "{deletingQueue?.metadata?.name || 'this queue'}" and all its data.
-              </Text>
-
-              <View style={styles.deleteActions}>
-                <TouchableOpacity
-                  style={[styles.deleteBtn, styles.deleteCancelBtn]}
-                  onPress={() => setShowDeleteModal(false)}
+                <ScrollView 
+                  showsVerticalScrollIndicator={false}
+                  contentContainerStyle={styles.modalScrollContent}
+                  keyboardShouldPersistTaps="handled"
                 >
-                  <Text style={styles.deleteCancelText}>Cancel</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.deleteBtn, styles.deleteConfirmBtn]}
-                  onPress={confirmDelete}
-                >
-                  <PhosphorIcon icon="Trash" size={14} color={COLORS.white} weight="bold" />
-                  <Text style={styles.deleteConfirmText}>Delete</Text>
-                </TouchableOpacity>
+                  <View style={styles.modalHeader}>
+                    <Text style={styles.modalTitle}>Edit Queue</Text>
+                  </View>
+
+                  <View style={styles.modalBody}>
+                    <View style={styles.inputGroup}>
+                      <Text style={styles.inputLabel}>Queue Name</Text>
+                      <TextInput
+                        style={styles.input}
+                        placeholder="Queue name"
+                        placeholderTextColor={COLORS.gray400}
+                        value={editName}
+                        onChangeText={setEditName}
+                        returnKeyType="next"
+                      />
+                    </View>
+
+                    <View style={styles.inputRow}>
+                      <View style={[styles.inputGroup, { flex: 1, marginRight: 8 }]}>
+                        <Text style={styles.inputLabel}>Est. Wait (mins)</Text>
+                        <TextInput
+                          style={styles.input}
+                          placeholder="15"
+                          placeholderTextColor={COLORS.gray400}
+                          value={editWait}
+                          onChangeText={setEditWait}
+                          keyboardType="numeric"
+                          returnKeyType="next"
+                        />
+                      </View>
+
+                      <View style={[styles.inputGroup, { flex: 1, marginLeft: 8 }]}>
+                        <Text style={styles.inputLabel}>Capacity</Text>
+                        <TextInput
+                          style={styles.input}
+                          placeholder="50"
+                          placeholderTextColor={COLORS.gray400}
+                          value={editCapacity}
+                          onChangeText={setEditCapacity}
+                          keyboardType="numeric"
+                          returnKeyType="done"
+                          onSubmitEditing={handleSaveEdit}
+                        />
+                      </View>
+                    </View>
+
+                    <TouchableOpacity
+                      style={styles.modalSaveBtn}
+                      onPress={handleSaveEdit}
+                      activeOpacity={0.8}
+                    >
+                      <Text style={styles.modalSaveBtnText}>Save Changes</Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      style={styles.modalCancelBtn}
+                      onPress={() => {
+                        setShowEditModal(false);
+                        Keyboard.dismiss();
+                      }}
+                      activeOpacity={0.8}
+                    >
+                      <Text style={styles.modalCancelBtnText}>Cancel</Text>
+                    </TouchableOpacity>
+                  </View>
+                </ScrollView>
               </View>
-            </View>
+            </KeyboardAvoidingView>
           </View>
-        </View>
+        </TouchableWithoutFeedback>
       </Modal>
     </SafeScreen>
   );
@@ -419,334 +453,137 @@ export default function StaffMyQueueScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F5F6FA' },
-  loadingContainer: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 12,
-  },
-  loadingText: {
-    fontSize: 14,
-    color: COLORS.gray500,
-    fontWeight: '500',
-  },
-  errorText: {
-    fontSize: 13,
-    color: COLORS.red,
-    fontWeight: '600',
-    textAlign: 'center',
-    paddingHorizontal: 20,
-  },
-  accessDenied: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 40,
-    gap: 12,
-  },
+  loadingContainer: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12 },
+  loadingText: { fontSize: 14, color: COLORS.gray500, fontWeight: '500' },
+  errorText: { fontSize: 13, color: COLORS.red, fontWeight: '600', textAlign: 'center', paddingHorizontal: 20 },
+  accessDenied: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 40, gap: 12 },
   accessTitle: { fontSize: 24, fontWeight: '800', color: COLORS.gray900 },
   accessSub: { fontSize: 14, color: COLORS.gray500, textAlign: 'center' },
-  accessButton: {
-    backgroundColor: COLORS.red,
-    paddingHorizontal: 32,
-    paddingVertical: 14,
-    borderRadius: 12,
-    marginTop: 8,
-  },
+  accessButton: { backgroundColor: COLORS.red, paddingHorizontal: 32, paddingVertical: 14, borderRadius: 12, marginTop: 8 },
   accessButtonText: { color: COLORS.white, fontWeight: '700', fontSize: 16 },
-  filterContainer: {
-    flexDirection: 'row',
-    backgroundColor: COLORS.white,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.gray100,
-  },
-  filterTab: {
-    paddingHorizontal: 14,
-    paddingVertical: 4,
-    borderRadius: 14,
-    marginRight: 6,
-  },
-  filterTabActive: {
-    backgroundColor: COLORS.red,
-  },
-  filterText: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: COLORS.gray500,
-  },
-  filterTextActive: {
-    color: COLORS.white,
-  },
   scroll: { flex: 1 },
-  content: { padding: 12, paddingBottom: 40 },
-  emptyContainer: {
-    alignItems: 'center',
-    paddingVertical: 40,
-    gap: 6,
-  },
-  emptyTitle: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: COLORS.gray600,
-  },
-  emptySub: {
-    fontSize: 12,
-    color: COLORS.gray400,
-    textAlign: 'center',
-  },
-  createQueueBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: COLORS.red,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 8,
-    marginTop: 4,
-  },
-  createQueueBtnText: {
-    color: COLORS.white,
-    fontWeight: '700',
-    fontSize: 12,
-  },
-  queueCard: {
-    backgroundColor: COLORS.white,
-    borderRadius: 10,
-    padding: 12,
-    marginBottom: 8,
-    borderWidth: 1,
-    borderColor: COLORS.gray100,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.02,
-    shadowRadius: 3,
-    elevation: 0.5,
-  },
-  queueHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  queueHeaderLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  queueIcon: {
-    width: 30,
-    height: 30,
-    borderRadius: 6,
-    backgroundColor: COLORS.redLight,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  queueName: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: COLORS.gray900,
-  },
-  queueDate: {
-    fontSize: 9,
-    color: COLORS.gray400,
-    marginTop: 1,
-  },
-  queueCreator: {
-    fontSize: 9,
-    color: COLORS.gray400,
-    marginTop: 1,
-  },
-  queueActions: {
-    flexDirection: 'row',
-    gap: 4,
-  },
-  queueActionBtn: {
-    width: 26,
-    height: 26,
-    borderRadius: 6,
-    backgroundColor: COLORS.blueLight,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  deleteActionBtn: {
-    backgroundColor: '#FEF2F2',
-  },
-  queueStats: {
-    flexDirection: 'row',
-    gap: 10,
-    paddingTop: 8,
-    borderTopWidth: 1,
-    borderTopColor: COLORS.gray100,
-  },
-  queueStat: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 3,
-  },
-  queueStatText: {
-    fontSize: 10,
-    color: COLORS.gray500,
-  },
-  queueStatusBadge: {
-    backgroundColor: COLORS.greenLight,
-    paddingHorizontal: 6,
-    paddingVertical: 1,
-    borderRadius: 6,
-  },
-  statusDot: {
-    width: 4,
-    height: 4,
-    borderRadius: 2,
-  },
-  modalOverlay: {
-    flex: 1,
-    justifyContent: 'flex-end',
-  },
-  modalBackdrop: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.3)',
+  content: { padding: 16, paddingBottom: 100 },
+  statsRow: { flexDirection: 'row', gap: 10, marginBottom: 16 },
+  statCard: { flex: 1, backgroundColor: COLORS.white, borderRadius: 10, padding: 14, alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.03, shadowRadius: 4, elevation: 1 },
+  statNumber: { fontSize: 24, fontWeight: '800', color: COLORS.red },
+  statLabel: { fontSize: 10, color: COLORS.gray500, textTransform: 'uppercase', fontWeight: '600', marginTop: 2 },
+  queuesSection: { backgroundColor: COLORS.white, borderRadius: 10, padding: 14, marginBottom: 16 },
+  sectionTitle: { fontSize: 14, fontWeight: '700', color: COLORS.gray700, marginBottom: 10 },
+  queueItem: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: COLORS.gray100 },
+  queueItemLeft: { flex: 1 },
+  queueItemName: { fontSize: 14, fontWeight: '600', color: COLORS.gray900 },
+  queueItemMeta: { fontSize: 12, color: COLORS.gray500, marginTop: 2 },
+  queueItemActions: { flexDirection: 'row', gap: 8 },
+  actionBtn: { padding: 6, borderRadius: 6, borderWidth: 1 },
+  editBtn: { borderColor: COLORS.blue, backgroundColor: COLORS.blueLight },
+  deleteBtn: { borderColor: COLORS.red, backgroundColor: COLORS.redLight },
+  queueSelector: { backgroundColor: COLORS.white, borderRadius: 10, padding: 12, marginBottom: 16 },
+  queueSelectorLabel: { fontSize: 12, fontWeight: '600', color: COLORS.gray600, marginBottom: 8 },
+  queueSelectorScroll: { flexDirection: 'row' },
+  queueChip: { paddingHorizontal: 14, paddingVertical: 6, borderRadius: 20, backgroundColor: COLORS.gray100, marginRight: 8, borderWidth: 1, borderColor: 'transparent' },
+  queueChipActive: { backgroundColor: COLORS.red, borderColor: COLORS.red },
+  queueChipText: { fontSize: 12, fontWeight: '600', color: COLORS.gray600 },
+  queueChipTextActive: { color: COLORS.white },
+  emptyContainer: { alignItems: 'center', paddingVertical: 40, gap: 8 },
+  emptyTitle: { fontSize: 16, fontWeight: '700', color: COLORS.gray600 },
+  emptySub: { fontSize: 13, color: COLORS.gray400, textAlign: 'center' },
+  serveButton: { flexDirection: 'row', backgroundColor: COLORS.red, borderRadius: 10, padding: 14, alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 12 },
+  serveButtonText: { color: COLORS.white, fontSize: 16, fontWeight: '700' },
+  footer: { marginTop: 20, paddingTop: 12, borderTopWidth: 1, borderTopColor: COLORS.gray200, alignItems: 'center' },
+  footerText: { fontSize: 10, color: COLORS.gray400, fontWeight: '600' },
+  footerSub: { fontSize: 8, color: COLORS.gray300, marginTop: 2 },
+  
+  // Modal styles - FIXED
+  modalOverlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.5)' },
+  modalBackdrop: { flex: 1, backgroundColor: 'transparent' },
+  keyboardAvoidingView: { 
+    justifyContent: 'flex-end', 
+    width: '100%',
   },
   modalSheet: {
     backgroundColor: COLORS.white,
-    borderTopLeftRadius: 18,
-    borderTopRightRadius: 18,
-    paddingHorizontal: 18,
-    paddingBottom: 26,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingHorizontal: 20,
     paddingTop: 4,
+    paddingBottom: Platform.OS === 'ios' ? 40 : 20,
+    maxHeight: '80%',
+    width: '100%',
+  },
+  modalScrollContent: {
+    paddingBottom: 20,
   },
   modalHandle: {
     alignItems: 'center',
-    paddingVertical: 4,
+    paddingVertical: 6,
   },
   modalHandleBar: {
-    width: 32,
-    height: 3,
+    width: 36,
+    height: 3.5,
     backgroundColor: COLORS.gray200,
     borderRadius: 2,
   },
   modalHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 12,
+    marginBottom: 16,
     paddingTop: 2,
   },
-  modalHeaderIconEdit: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: COLORS.blue,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   modalTitle: {
-    flex: 1,
-    fontSize: 15,
+    fontSize: 18,
     fontWeight: '800',
     color: COLORS.gray900,
-    marginLeft: 8,
-  },
-  modalClose: {
-    width: 26,
-    height: 26,
-    borderRadius: 13,
-    backgroundColor: COLORS.gray100,
-    alignItems: 'center',
-    justifyContent: 'center',
+    textAlign: 'center',
   },
   modalBody: {
-    gap: 10,
+    gap: 12,
   },
   inputGroup: {
     marginBottom: 2,
   },
   inputLabel: {
-    fontSize: 9,
+    fontSize: 10,
     fontWeight: '600',
     color: COLORS.gray500,
-    marginBottom: 3,
+    marginBottom: 4,
     textTransform: 'uppercase',
     letterSpacing: 0.3,
   },
   input: {
     borderWidth: 1.5,
     borderColor: COLORS.gray200,
-    borderRadius: 8,
-    padding: 10,
-    fontSize: 13,
+    borderRadius: 10,
+    padding: 11,
+    fontSize: 14,
     color: COLORS.gray900,
     backgroundColor: COLORS.white,
   },
   inputRow: {
     flexDirection: 'row',
   },
-  modalUpdateBtn: {
-    backgroundColor: COLORS.blue,
-    borderRadius: 8,
-    paddingVertical: 11,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 2,
-  },
-  modalUpdateBtnText: {
-    color: COLORS.white,
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  deleteContent: {
-    alignItems: 'center',
-    paddingVertical: 10,
-    gap: 6,
-  },
-  deleteIcon: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
-    backgroundColor: '#FEF2F2',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  deleteTitle: {
-    fontSize: 16,
-    fontWeight: '800',
-    color: COLORS.gray900,
-  },
-  deleteSub: {
-    fontSize: 11,
-    color: COLORS.gray500,
-    textAlign: 'center',
-    marginBottom: 2,
-  },
-  deleteActions: {
-    flexDirection: 'row',
-    gap: 8,
-    width: '100%',
-  },
-  deleteBtn: {
-    flex: 1,
-    paddingVertical: 10,
-    borderRadius: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexDirection: 'row',
-    gap: 4,
-  },
-  deleteCancelBtn: {
-    backgroundColor: COLORS.gray100,
-  },
-  deleteCancelText: {
-    color: COLORS.gray600,
-    fontWeight: '600',
-    fontSize: 12,
-  },
-  deleteConfirmBtn: {
+  modalSaveBtn: {
     backgroundColor: COLORS.red,
+    borderRadius: 10,
+    paddingVertical: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 6,
   },
-  deleteConfirmText: {
+  modalSaveBtnText: {
     color: COLORS.white,
+    fontSize: 15,
     fontWeight: '700',
-    fontSize: 12,
+  },
+  modalCancelBtn: {
+    borderRadius: 10,
+    paddingVertical: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: COLORS.gray300,
+    marginTop: 6,
+  },
+  modalCancelBtnText: {
+    color: COLORS.gray600,
+    fontSize: 15,
+    fontWeight: '600',
   },
 });

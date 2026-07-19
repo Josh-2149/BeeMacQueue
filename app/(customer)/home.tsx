@@ -1,93 +1,60 @@
+// app/(customer)/home.tsx
 import React, { useState, useEffect } from 'react';
 import {
   View, Text, ScrollView, StyleSheet,
-  RefreshControl, Alert,
+  RefreshControl, Alert, TouchableOpacity,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuth } from '../../hooks/useAuth';
-import { useEstablishments } from '../../hooks/useEstablishments';
+import { useCustomerQueues } from '../../hooks/useCustomerQueues';
 import { useQueueContext } from '../../context/QueueContext';
-import { EstablishmentCard } from '../../components/EstablishmentCard';
 import { QueueTicketCard } from '../../components/QueueTicketCard';
-import { JoinModal } from '../../components/JoinModal';
-import { FilterBar } from '../../components/FilterBar';
-import { SectionLabel, EmptyState, LiveDot } from '../../components/ui';
 import { SafeScreen } from '../../components/SafeScreen';
-import { COLORS } from '../../lib/constants';
-import { Establishment } from '../../types';
+import CustomerHeader from '../../components/CustomerHeader';
+import { COLORS, BRAND } from '../../lib/constants';
+import { Queue } from '../../types';
+import { Ionicons } from '@expo/vector-icons';
 
 console.log('🏠 [Customer Home] Screen mounted');
-
-const FILTERS = [
-  { key: 'all', label: 'All Branches' },
-  { key: 'jollibee', label: '🐝 Jollibee' },
-  { key: 'mcdo', label: "🍟 McDonald's" },
-  { key: 'open', label: '✅ Open Now' },
-];
 
 export default function CustomerHomeScreen() {
   console.log('🏠 [Customer Home] Rendering');
   const router = useRouter();
-  const { user, profile } = useAuth();
-  const {
-    establishments, totalInQueue, avgWait,
-    loading: estLoading, loadEstablishments,
-  } = useEstablishments();
+  const { profile } = useAuth();
+  const { queues, loading, refresh: refreshQueues } = useCustomerQueues();
   const {
     activeQueue, joining,
     joinQueue, leaveQueue, refreshActive,
-  } = useQueueContext();  // ← USE CONTEXT INSTEAD
-
-  const [filter, setFilter] = useState('all');
-  const [selectedEst, setSelectedEst] = useState<Establishment | null>(null);
+  } = useQueueContext();
   const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
     if (profile?.role === 'staff') {
-      console.log('🏠 [Customer Home] Staff user, redirecting to staff dashboard');
       router.replace('/(staff)/dashboard');
     }
   }, [profile]);
 
-  const filtered = establishments.filter((e) => {
-    if (filter === 'jollibee') return e.brand === 'jollibee';
-    if (filter === 'mcdo') return e.brand === 'mcdo';
-    if (filter === 'open') return e.is_open;
-    return true;
-  });
-
   async function onRefresh() {
     setRefreshing(true);
-    await Promise.all([loadEstablishments(), refreshActive()]);
+    await Promise.all([refreshQueues(), refreshActive()]);
     setRefreshing(false);
   }
 
-  async function handleJoin() {
-    if (!selectedEst || !user) return;
+  async function handleJoin(queue: Queue) {
     if (activeQueue) {
       Alert.alert(
         'Already in queue',
         `You have ticket #${activeQueue.ticket_number}. Leave it first.`
       );
-      setSelectedEst(null);
       return;
     }
     try {
-      const ticket = await joinQueue(selectedEst.id);
-      setSelectedEst(null);
-      Alert.alert('🎫 Joined!', `Ticket #${ticket} at ${selectedEst.name} — ${selectedEst.branch}.`);
+      const ticket = await joinQueue(queue.id);
+      Alert.alert('🎫 Joined!', `Ticket #${ticket} for "${queue.name}" at ${queue.establishment?.name || 'branch'}.`);
     } catch (e: any) {
-      setSelectedEst(null);
       Alert.alert('Could not join', e.message);
     }
   }
-
-  const greeting = () => {
-    const h = new Date().getHours();
-    if (h < 12) return 'Good morning';
-    if (h < 17) return 'Good afternoon';
-    return 'Good evening';
-  };
 
   if (profile?.role === 'staff') {
     return (
@@ -101,56 +68,15 @@ export default function CustomerHomeScreen() {
 
   return (
     <SafeScreen style={styles.container}>
-      <View style={styles.header}>
-        <View>
-          <Text style={styles.headerTitle}>
-            🍔 Bee<Text style={styles.headerYellow}>Mac</Text>Queue
-          </Text>
-          <LiveDot />
-        </View>
-        <Text style={styles.headerGreet}>
-          {greeting()}, {profile?.name?.split(' ')[0] ?? 'there'}!
-        </Text>
-      </View>
-
+      <CustomerHeader title="BeeMacQueue" />
       <ScrollView
         style={styles.scroll}
         contentContainerStyle={styles.scrollContent}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={onRefresh}
-            tintColor={COLORS.red}
-          />
-        }
-        showsVerticalScrollIndicator={false}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={COLORS.red} />}
       >
-        <View style={styles.heroCard}>
-          <Text style={styles.heroTitle}>Skip the line in CDO 🏙️</Text>
-          <Text style={styles.heroSub}>
-            Real-time queue management for Jollibee & McDonald's
-          </Text>
-          <View style={styles.heroStats}>
-            <View style={styles.heroStat}>
-              <Text style={styles.heroStatNum}>{establishments.length}</Text>
-              <Text style={styles.heroStatLabel}>Branches</Text>
-            </View>
-            <View style={styles.heroStatDivider} />
-            <View style={styles.heroStat}>
-              <Text style={styles.heroStatNum}>{totalInQueue}</Text>
-              <Text style={styles.heroStatLabel}>In queue now</Text>
-            </View>
-            <View style={styles.heroStatDivider} />
-            <View style={styles.heroStat}>
-              <Text style={styles.heroStatNum}>{avgWait}m</Text>
-              <Text style={styles.heroStatLabel}>Avg wait</Text>
-            </View>
-          </View>
-        </View>
-
         {activeQueue && (
           <>
-            <SectionLabel>YOUR ACTIVE TICKET</SectionLabel>
+            <Text style={styles.sectionLabel}>YOUR ACTIVE TICKET</Text>
             <QueueTicketCard
               queue={activeQueue}
               onLeave={leaveQueue}
@@ -159,68 +85,124 @@ export default function CustomerHomeScreen() {
           </>
         )}
 
-        <SectionLabel>BROWSE BRANCHES</SectionLabel>
-        <FilterBar filters={FILTERS} active={filter} onSelect={setFilter} />
-
-        {estLoading && establishments.length === 0 ? (
-          <EmptyState icon="⏳" title="Loading branches..." />
-        ) : filtered.length === 0 ? (
-          <EmptyState icon="🏬" title="No branches found" sub="Try a different filter" />
+        <Text style={styles.sectionLabel}>AVAILABLE QUEUES</Text>
+        {loading ? (
+          <Text style={styles.loadingText}>Loading queues...</Text>
+        ) : queues.length === 0 ? (
+          <View style={styles.emptyContainer}>
+            <Ionicons name="clipboard-outline" size={48} color={COLORS.gray300} />
+            <Text style={styles.emptyTitle}>No active queues</Text>
+            <Text style={styles.emptySub}>Check back later</Text>
+          </View>
         ) : (
-          filtered.map((est) => (
-            <EstablishmentCard
-              key={est.id}
-              establishment={est}
-              onJoin={() => setSelectedEst(est)}
-            />
-          ))
+          queues.map((q) => {
+            const brand = q.establishment?.brand || 'jollibee';
+            const brandInfo = BRAND[brand];
+            return (
+              <View key={q.id} style={styles.queueCard}>
+                <View style={styles.queueHeader}>
+                  <View style={styles.brandBadge}>
+                    <Text style={styles.brandEmoji}>{brandInfo?.emoji}</Text>
+                  </View>
+                  <View style={styles.queueInfo}>
+                    <Text style={styles.queueName}>{q.name}</Text>
+                    <Text style={styles.branchName}>{q.establishment?.name} · {q.establishment?.branch}</Text>
+                  </View>
+                  <View style={styles.waitingBadge}>
+                    <Text style={styles.waitingCount}>{q.waitingCount || 0}</Text>
+                    <Text style={styles.waitingLabel}>waiting</Text>
+                  </View>
+                </View>
+                <View style={styles.queueDetails}>
+                  <View style={styles.detailItem}>
+                    <Ionicons name="time-outline" size={14} color={COLORS.gray500} />
+                    <Text style={styles.detailText}>~{q.estimated_wait_mins || 15} min</Text>
+                  </View>
+                  <View style={styles.detailItem}>
+                    <Ionicons name="people-outline" size={14} color={COLORS.gray500} />
+                    <Text style={styles.detailText}>Capacity {q.capacity || 50}</Text>
+                  </View>
+                </View>
+                {q.description && (
+                  <Text style={styles.description}>{q.description}</Text>
+                )}
+                <TouchableOpacity
+                  style={styles.joinButton}
+                  onPress={() => handleJoin(q)}
+                  disabled={joining}
+                >
+                  <Text style={styles.joinButtonText}>
+                    {joining ? 'Joining...' : 'Join Queue'}
+                  </Text>
+                  <Ionicons name="arrow-forward" size={16} color={COLORS.white} />
+                </TouchableOpacity>
+              </View>
+            );
+          })
         )}
       </ScrollView>
-
-      <JoinModal
-        visible={!!selectedEst}
-        establishment={selectedEst}
-        joining={joining}
-        onConfirm={handleJoin}
-        onClose={() => setSelectedEst(null)}
-      />
     </SafeScreen>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.bg },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  loadingText: {
-    fontSize: 16,
-    color: COLORS.gray500,
-  },
-  header: {
-    backgroundColor: COLORS.red, paddingTop: 56, paddingHorizontal: 20,
-    paddingBottom: 16, flexDirection: 'row',
-    justifyContent: 'space-between', alignItems: 'flex-end',
-  },
-  headerTitle: { fontSize: 22, fontWeight: '900', color: COLORS.white, letterSpacing: -0.5, marginBottom: 4 },
-  headerYellow: { color: COLORS.yellow },
-  headerGreet: { fontSize: 13, color: 'rgba(255,255,255,0.75)', fontWeight: '500' },
+  loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  loadingText: { fontSize: 16, color: COLORS.gray500 },
   scroll: { flex: 1 },
   scrollContent: { padding: 16, paddingBottom: 36 },
-  heroCard: { backgroundColor: COLORS.red, borderRadius: 18, padding: 20, marginBottom: 20 },
-  heroTitle: { fontSize: 17, fontWeight: '800', color: COLORS.white, marginBottom: 5 },
-  heroSub: { fontSize: 12, color: 'rgba(255,255,255,0.75)', lineHeight: 18, marginBottom: 18 },
-  heroStats: {
-    flexDirection: 'row', backgroundColor: 'rgba(0,0,0,0.15)',
-    borderRadius: 12, padding: 14,
+  sectionLabel: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: COLORS.gray600,
+    marginBottom: 10,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
-  heroStat: { flex: 1, alignItems: 'center' },
-  heroStatNum: { fontSize: 26, fontWeight: '900', color: COLORS.yellow },
-  heroStatLabel: {
-    fontSize: 9, color: 'rgba(255,255,255,0.65)',
-    textTransform: 'uppercase', letterSpacing: 0.4, marginTop: 3,
+  emptyContainer: { alignItems: 'center', paddingVertical: 40 },
+  emptyTitle: { fontSize: 16, fontWeight: '700', color: COLORS.gray600, marginTop: 10 },
+  emptySub: { fontSize: 14, color: COLORS.gray400, marginTop: 4 },
+  queueCard: {
+    backgroundColor: COLORS.white,
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.03,
+    shadowRadius: 4,
+    elevation: 1,
   },
-  heroStatDivider: { width: 1, backgroundColor: 'rgba(255,255,255,0.2)', marginVertical: 4 },
+  queueHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
+  brandBadge: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: COLORS.gray100,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 10,
+  },
+  brandEmoji: { fontSize: 18 },
+  queueInfo: { flex: 1 },
+  queueName: { fontSize: 16, fontWeight: '700', color: COLORS.gray900 },
+  branchName: { fontSize: 12, color: COLORS.gray500, marginTop: 1 },
+  waitingBadge: { alignItems: 'center' },
+  waitingCount: { fontSize: 20, fontWeight: '800', color: COLORS.red },
+  waitingLabel: { fontSize: 9, color: COLORS.gray400, textTransform: 'uppercase' },
+  queueDetails: { flexDirection: 'row', gap: 16, marginBottom: 8 },
+  detailItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  detailText: { fontSize: 12, color: COLORS.gray600 },
+  description: { fontSize: 12, color: COLORS.gray500, marginBottom: 10 },
+  joinButton: {
+    flexDirection: 'row',
+    backgroundColor: COLORS.red,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  joinButtonText: { color: COLORS.white, fontWeight: '700', fontSize: 14 },
 });

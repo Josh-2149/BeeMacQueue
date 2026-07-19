@@ -1,13 +1,15 @@
+// context/StaffQueueContext.tsx
 import React, { createContext, useContext, ReactNode, useRef, useEffect, useState } from 'react';
 import { useAuth } from '../hooks/useAuth';
 import { useStaffQueue } from '../hooks/useStaffQueue';
-import { QueueEntry, Establishment } from '../types';
+import { QueueEntry, Establishment, Queue } from '../types';
 
 type StaffQueueContextType = {
   waitingList: QueueEntry[];
   servingList: QueueEntry[];
   servedList: QueueEntry[];
   queueTemplates: any[];
+  queues: Queue[];
   stats: {
     totalWaiting: number;
     totalServing: number;
@@ -19,7 +21,7 @@ type StaffQueueContextType = {
   creating: boolean;
   processing: boolean;
   error: string | null;
-  serveNext: () => Promise<boolean>;
+  serveNext: (queueId?: string) => Promise<boolean>;
   markServed: (entryId: string) => Promise<boolean>;
   callCustomer: (entryId: string) => Promise<boolean>;
   cancelCustomer: (entryId: string) => Promise<boolean>;
@@ -52,6 +54,30 @@ export function StaffQueueProvider({ children }: { children: ReactNode }) {
   
   const queueData = useStaffQueue(staffId);
   
+  const contextValue: StaffQueueContextType = {
+    waitingList: queueData.waitingList || [],
+    servingList: queueData.servingList || [],
+    servedList: queueData.servedList || [],
+    queueTemplates: queueData.queueTemplates || [],
+    queues: queueData.queues || [],
+    stats: queueData.stats || { totalWaiting: 0, totalServing: 0, totalServed: 0, todayServed: 0 },
+    establishment: queueData.establishment || null,
+    loading: queueData.loading || false,
+    creating: queueData.creating || false,
+    processing: queueData.processing || false,
+    error: queueData.error || null,
+    serveNext: queueData.serveNext || (async () => false),
+    markServed: queueData.markServed || (async () => false),
+    callCustomer: queueData.callCustomer || (async () => false),
+    cancelCustomer: queueData.cancelCustomer || (async () => false),
+    refresh: queueData.refresh || (async () => {}),
+    createQueue: queueData.createQueue || (async () => ({ success: false, error: 'Not implemented' })),
+    updateQueue: queueData.updateQueue || (async () => ({ success: false, error: 'Not implemented' })),
+    deleteQueue: queueData.deleteQueue || (async () => ({ success: false, error: 'Not implemented' })),
+    getQueues: queueData.getQueues || (async () => ({ success: false, error: 'Not implemented', data: [] })),
+    getQueueById: queueData.getQueueById || (async () => ({ success: false, error: 'Not implemented', data: null })),
+  };
+  
   const instanceId = useRef(++staffQueueProviderCount);
   
   useEffect(() => {
@@ -59,7 +85,7 @@ export function StaffQueueProvider({ children }: { children: ReactNode }) {
   }, [staffId]);
 
   return (
-    <StaffQueueContext.Provider value={queueData}>
+    <StaffQueueContext.Provider value={contextValue}>
       {children}
     </StaffQueueContext.Provider>
   );

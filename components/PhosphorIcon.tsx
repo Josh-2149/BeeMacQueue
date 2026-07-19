@@ -20,6 +20,8 @@ import {
   ChartBar,
   MagnifyingGlass,
   X,
+  XCircle,          // 🆕 ADD THIS
+  PlusCircle,       // 🆕 ADD THIS
   Plus,
   Minus,
   Clock,
@@ -57,11 +59,11 @@ import {
   CaretRight,
   Rocket,
   Crown,
+  WarningOctagon,   // 🆕 ADD THIS (for priority badge)
 } from 'phosphor-react-native';
 
 console.log('🔵 PhosphorIcon component loaded');
 
-// Map of icon names to Phosphor components
 const iconMap = {
   Storefront,
   Envelope,
@@ -83,6 +85,8 @@ const iconMap = {
   ChartBar,
   MagnifyingGlass,
   X,
+  XCircle,          // 🆕 ADD THIS
+  PlusCircle,       // 🆕 ADD THIS
   Plus,
   Minus,
   Clock,
@@ -107,7 +111,6 @@ const iconMap = {
   SignOut,
   CaretDown,
   CaretUp,
-  // Added missing icons
   Tag,
   Users,
   Queue,
@@ -121,6 +124,7 @@ const iconMap = {
   CaretRight,
   Rocket,
   Crown,
+  WarningOctagon,   // 🆕 ADD THIS
 } as const;
 
 type IconName = keyof typeof iconMap;

@@ -1,4 +1,3 @@
-// hooks/useStaffQueue.ts
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 import { QueueEntry, Establishment, Queue } from '../types';
@@ -146,7 +145,6 @@ export function useStaffQueue(staffId: string | undefined) {
     }
     if (isMounted.current) setLoading(true);
     try {
-      // 1. Get all queues for this establishment
       const { data: queuesData, error: queuesErr } = await supabase
         .from('queues')
         .select('*')
@@ -156,7 +154,6 @@ export function useStaffQueue(staffId: string | undefined) {
 
       const queueIds = queuesData?.map((q: any) => q.id) || [];
 
-      // 2. Get all queue entries for these queues
       let entries: any[] = [];
       if (queueIds.length > 0) {
         const { data: entriesData, error: entriesErr } = await supabase
@@ -172,19 +169,16 @@ export function useStaffQueue(staffId: string | undefined) {
         entries = entriesData || [];
       }
 
-      // 3. Process entries
       const waiting = entries?.filter((e: any) => e.status === 'waiting' && e.ticket_number > 0) || [];
       const serving = entries?.filter((e: any) => e.status === 'serving' && e.ticket_number > 0) || [];
       const served = entries?.filter((e: any) => e.status === 'completed' && e.ticket_number > 0) || [];
 
-      // 4. Update queues with waiting counts
       const updatedQueues = (queuesData || []).map((q: any) => {
         const qWaiting = waiting.filter((e: any) => e.queue_id === q.id).length;
         const qServing = serving.filter((e: any) => e.queue_id === q.id).length;
         return { ...q, waitingCount: qWaiting, servingCount: qServing };
       });
 
-      // 5. Queue templates
       const templates = (queuesData || []).map((q: any) => ({
         ...q,
         metadata: {
@@ -257,7 +251,6 @@ export function useStaffQueue(staffId: string | undefined) {
 
       console.log(`🏪 [useStaffQueue] ✅ Queue created: ${newQueue.id}`);
 
-      // Notify creator - FIXED: using staffId (string) directly
       if (staffId) {
         await addNotification({
           user_id: staffId,
@@ -269,17 +262,16 @@ export function useStaffQueue(staffId: string | undefined) {
         });
       }
 
-      // Notify other staff in same branch
       await notifyStaffInBranch(
         '📋 New Queue Created',
         `${staffProfile?.name || 'Staff'} created "${data.name}" queue`,
         { queue_id: newQueue.id, queue_name: data.name, created_by: staffId }
       );
 
-      // Notify ALL customers in same branch
+      // 🆕 Notify ALL customers in same branch
       await notifyCustomersInBranch(
         '📋 New Queue Available!',
-        `"${data.name}" queue is now open at ${establishment?.name || 'your branch'}`,
+        `"${data.name}" queue is now open at ${establishment?.name || 'your branch'}. Join now!`,
         { queue_id: newQueue.id, queue_name: data.name, establishment_id: establishmentId }
       );
 
@@ -325,6 +317,26 @@ export function useStaffQueue(staffId: string | undefined) {
         { queue_id: queueId, queue_name: current?.name }
       );
 
+      // 🆕 Notify customers in this queue
+      const { data: customersInQueue } = await supabase
+        .from('queue_entries')
+        .select('user_id')
+        .eq('queue_id', queueId)
+        .in('status', ['waiting', 'serving']);
+
+      if (customersInQueue) {
+        for (const entry of customersInQueue) {
+          await addNotification({
+            user_id: entry.user_id,
+            title: '🔄 Queue Updated',
+            message: `"${current?.name || 'Queue'}" has been updated by staff`,
+            type: 'queue',
+            priority: 'normal',
+            metadata: { queue_id: queueId },
+          });
+        }
+      }
+
       await fetchStaffData();
       return { success: true };
     } catch (err: any) {
@@ -346,7 +358,7 @@ export function useStaffQueue(staffId: string | undefined) {
 
       const { data: waitingCustomers } = await supabase
         .from('queue_entries')
-        .select('id')
+        .select('id, user_id')
         .eq('queue_id', queueId)
         .eq('status', 'waiting');
 
@@ -423,16 +435,24 @@ export function useStaffQueue(staffId: string | undefined) {
         .eq('id', next.id);
       if (updateErr) throw updateErr;
 
+      // 🆕 Notify the customer being served
       if (next.user_id) {
         await addNotification({
           user_id: next.user_id,
           title: '🔔 Your Turn!',
-          message: `You're now being served at ${establishment?.name || 'our branch'}`,
+          message: `You're now being served at ${establishment?.name || 'our branch'}. Please proceed to the counter.`,
           type: 'serve',
           priority: 'high',
           metadata: { queue_id: next.queue_id, ticket_number: next.ticket_number },
         });
       }
+
+      // 🆕 Notify other staff
+      await notifyStaffInBranch(
+        '🔔 Customer Called',
+        `Ticket #${next.ticket_number} is now being served`,
+        { entry_id: next.id, ticket_number: next.ticket_number }
+      );
 
       await fetchStaffData();
       return true;
@@ -440,40 +460,54 @@ export function useStaffQueue(staffId: string | undefined) {
       console.log('serveNext error:', err);
       return false;
     } finally { setProcessing(false); }
-  }, [establishmentId, processing, fetchStaffData, establishment, addNotification]);
+  }, [establishmentId, processing, fetchStaffData, establishment, addNotification, notifyStaffInBranch]);
 
-  // MARK SERVED
+  // MARK SERVED (Manual complete by staff or customer)
   const markServed = useCallback(async (entryId: string) => {
     if (!establishmentId || processing) return false;
     setProcessing(true);
     try {
       const { data: entry, error: entryErr } = await supabase
-        .from('queue_entries').select('user_id, ticket_number').eq('id', entryId).single();
+        .from('queue_entries').select('user_id, ticket_number, queue_id, status').eq('id', entryId).single();
       if (entryErr) throw entryErr;
       
       const { error } = await supabase
         .from('queue_entries')
-        .update({ status: 'completed', served_by: staffId, served_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+        .update({ 
+          status: 'completed', 
+          served_by: staffId, 
+          served_at: new Date().toISOString(), 
+          updated_at: new Date().toISOString() 
+        })
         .eq('id', entryId);
       if (error) throw error;
       
+      // 🆕 Notify the customer
       if (entry && entry.user_id) {
         await addNotification({
           user_id: entry.user_id,
           title: '✅ Service Complete',
           message: `Thank you! Ticket #${entry.ticket_number} has been served.`,
-          type: 'queue',
+          type: 'serve',
           priority: 'normal',
-          metadata: { queue_id: entryId, ticket_number: entry.ticket_number },
+          metadata: { queue_id: entry.queue_id, ticket_number: entry.ticket_number },
         });
       }
+
+      // 🆕 Notify staff
+      await notifyStaffInBranch(
+        '✅ Customer Served',
+        `Ticket #${entry.ticket_number} marked as completed`,
+        { entry_id: entryId, ticket_number: entry.ticket_number }
+      );
+
       await fetchStaffData();
       return true;
     } catch (err) {
       console.log('markServed error:', err);
       return false;
     } finally { setProcessing(false); }
-  }, [establishmentId, staffId, processing, fetchStaffData, addNotification]);
+  }, [establishmentId, staffId, processing, fetchStaffData, addNotification, notifyStaffInBranch]);
 
   // CANCEL CUSTOMER
   const cancelCustomer = useCallback(async (entryId: string) => {
@@ -490,23 +524,32 @@ export function useStaffQueue(staffId: string | undefined) {
         .eq('id', entryId);
       if (error) throw error;
       
+      // 🆕 Notify customer
       if (entry && entry.user_id) {
         await addNotification({
           user_id: entry.user_id,
           title: '❌ Queue Cancelled',
-          message: `Ticket #${entry.ticket_number} has been cancelled.`,
+          message: `Ticket #${entry.ticket_number} has been cancelled by staff.`,
           type: 'queue',
-          priority: 'normal',
-          metadata: { queue_id: entryId, ticket_number: entry.ticket_number },
+          priority: 'high',
+          metadata: { ticket_number: entry.ticket_number },
         });
       }
+
+      // 🆕 Notify staff
+      await notifyStaffInBranch(
+        '❌ Customer Cancelled',
+        `Ticket #${entry.ticket_number} cancelled`,
+        { entry_id: entryId }
+      );
+
       await fetchStaffData();
       return true;
     } catch (err) {
       console.log('cancelCustomer error:', err);
       return false;
     } finally { setProcessing(false); }
-  }, [establishmentId, processing, fetchStaffData, addNotification]);
+  }, [establishmentId, processing, fetchStaffData, addNotification, notifyStaffInBranch]);
 
   // CALL CUSTOMER
   const callCustomer = useCallback(async (entryId: string) => {

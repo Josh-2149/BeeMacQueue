@@ -1,19 +1,28 @@
 // app/(customer)/home.tsx
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
-  View, Text, ScrollView, StyleSheet,
-  RefreshControl, Alert, TouchableOpacity,
+  View,
+  Text,
+  ScrollView,
+  StyleSheet,
+  RefreshControl,
+  Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuth } from '../../hooks/useAuth';
 import { useCustomerQueues } from '../../hooks/useCustomerQueues';
 import { useQueueContext } from '../../context/QueueContext';
 import { QueueTicketCard } from '../../components/QueueTicketCard';
+import { CustomerQueueCard } from '../../components/CustomerQueueCard';
+import { BranchSectionHeader } from '../../components/BranchSectionHeader';
+import { FilterBar } from '../../components/FilterBar';
 import { SafeScreen } from '../../components/SafeScreen';
-import CustomerHeader from '../../components/CustomerHeader';
-import { COLORS, BRAND } from '../../lib/constants';
+import { CustomerHeader } from '../../components/CustomerHeader';
+import { SectionLabel } from '../../components/ui';
+import { COLORS } from '../../lib/constants';
+import { PhosphorIcon } from '../../components/PhosphorIcon';
 import { Queue } from '../../types';
-import { Ionicons } from '@expo/vector-icons';
 
 console.log('🏠 [Customer Home] Screen mounted');
 
@@ -21,18 +30,38 @@ export default function CustomerHomeScreen() {
   console.log('🏠 [Customer Home] Rendering');
   const router = useRouter();
   const { profile } = useAuth();
-  const { queues, loading, refresh: refreshQueues } = useCustomerQueues();
+  const { groupedQueues, loading, refresh: refreshQueues } = useCustomerQueues();
   const {
-    activeQueue, joining,
-    joinQueue, leaveQueue, refreshActive,
+    activeQueue,
+    joining,
+    joinQueue,
+    leaveQueue,
+    refreshActive,
+    completedTodayQueueIds,
   } = useQueueContext();
   const [refreshing, setRefreshing] = useState(false);
+  const [selectedBrand, setSelectedBrand] = useState<string>('all');
+  const [joiningQueueId, setJoiningQueueId] = useState<string | null>(null);
 
+  // Redirect staff to dashboard
   useEffect(() => {
     if (profile?.role === 'staff') {
       router.replace('/(staff)/dashboard');
     }
   }, [profile]);
+
+  // Filter groups by brand
+  const filteredGroups = useMemo(() => {
+    if (selectedBrand === 'all') return groupedQueues;
+    return groupedQueues.filter((group) => group.brand === selectedBrand);
+  }, [groupedQueues, selectedBrand]);
+
+  // Filter options for FilterBar
+  const filterOptions = [
+    { key: 'all', label: 'All' },
+    { key: 'jollibee', label: '🐝 Jollibee' },
+    { key: 'mcdo', label: '🍟 McDonald\'s' },
+  ];
 
   async function onRefresh() {
     setRefreshing(true);
@@ -41,26 +70,59 @@ export default function CustomerHomeScreen() {
   }
 
   async function handleJoin(queue: Queue) {
-    if (activeQueue) {
+    // Already in this queue
+    if (activeQueue?.queue_id === queue.id) {
       Alert.alert(
-        'Already in queue',
-        `You have ticket #${activeQueue.ticket_number}. Leave it first.`
+        'Already Here!',
+        `You're already in this queue with ticket #${activeQueue.ticket_number}.`
       );
       return;
     }
+
+    // Already served today
+    if (completedTodayQueueIds.includes(queue.id)) {
+      Alert.alert(
+        'Served Today',
+        'You\'ve already been served in this queue today. Please come back tomorrow!'
+      );
+      return;
+    }
+
+    // Has active queue elsewhere
+    if (activeQueue) {
+      Alert.alert(
+        'Already in Queue',
+        `You have ticket #${activeQueue.ticket_number} at another queue. Leave it first to join here.`
+      );
+      return;
+    }
+
+    setJoiningQueueId(queue.id);
     try {
       const ticket = await joinQueue(queue.id);
-      Alert.alert('🎫 Joined!', `Ticket #${ticket} for "${queue.name}" at ${queue.establishment?.name || 'branch'}.`);
+      const branchName = queue.establishment?.name || 'branch';
+      Alert.alert(
+        '🎫 Joined!',
+        `Ticket #${ticket} for "${queue.name}" at ${branchName}.`
+      );
     } catch (e: any) {
       Alert.alert('Could not join', e.message);
+    } finally {
+      setJoiningQueueId(null);
     }
   }
 
-  if (profile?.role === 'staff') {
+  // Loading state
+  if (loading && !refreshing) {
     return (
       <SafeScreen style={styles.container}>
-        <View style={styles.loadingContainer}>
-          <Text style={styles.loadingText}>Redirecting to dashboard...</Text>
+        <CustomerHeader
+          title="Find a Queue"
+          subtitle="Browse all Jollibee & McDonald's branches in CDO"
+        />
+        <View style={styles.centerContainer}>
+          <ActivityIndicator size="large" color={COLORS.red} />
+          <Text style={styles.loadingText}>Loading queues...</Text>
         </View>
       </SafeScreen>
     );
@@ -68,15 +130,27 @@ export default function CustomerHomeScreen() {
 
   return (
     <SafeScreen style={styles.container}>
-      <CustomerHeader title="BeeMacQueue" />
+      <CustomerHeader
+        title="Find a Queue"
+        subtitle="Browse all Jollibee & McDonald's branches in CDO"
+      />
+
       <ScrollView
         style={styles.scroll}
         contentContainerStyle={styles.scrollContent}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={COLORS.red} />}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={COLORS.red}
+          />
+        }
+        showsVerticalScrollIndicator={false}
       >
+        {/* Active Ticket Section */}
         {activeQueue && (
           <>
-            <Text style={styles.sectionLabel}>YOUR ACTIVE TICKET</Text>
+            <SectionLabel>Your Active Ticket</SectionLabel>
             <QueueTicketCard
               queue={activeQueue}
               onLeave={leaveQueue}
@@ -85,124 +159,122 @@ export default function CustomerHomeScreen() {
           </>
         )}
 
-        <Text style={styles.sectionLabel}>AVAILABLE QUEUES</Text>
-        {loading ? (
-          <Text style={styles.loadingText}>Loading queues...</Text>
-        ) : queues.length === 0 ? (
+        {/* Available Queues Section */}
+        <SectionLabel>Available Queues</SectionLabel>
+
+        {/* Brand Filter */}
+        <FilterBar
+          filters={filterOptions}
+          active={selectedBrand}
+          onSelect={setSelectedBrand}
+        />
+
+        {/* Queue Groups by Branch */}
+        {filteredGroups.length === 0 ? (
           <View style={styles.emptyContainer}>
-            <Ionicons name="clipboard-outline" size={48} color={COLORS.gray300} />
+            <PhosphorIcon icon="Queue" size={48} color={COLORS.gray300} weight="bold" />
             <Text style={styles.emptyTitle}>No active queues</Text>
-            <Text style={styles.emptySub}>Check back later</Text>
+            <Text style={styles.emptySub}>
+              {selectedBrand === 'all'
+                ? 'Check back later for available queues'
+                : `No ${selectedBrand === 'jollibee' ? 'Jollibee' : "McDonald's"} queues available`}
+            </Text>
           </View>
         ) : (
-          queues.map((q) => {
-            const brand = q.establishment?.brand || 'jollibee';
-            const brandInfo = BRAND[brand];
-            return (
-              <View key={q.id} style={styles.queueCard}>
-                <View style={styles.queueHeader}>
-                  <View style={styles.brandBadge}>
-                    <Text style={styles.brandEmoji}>{brandInfo?.emoji}</Text>
-                  </View>
-                  <View style={styles.queueInfo}>
-                    <Text style={styles.queueName}>{q.name}</Text>
-                    <Text style={styles.branchName}>{q.establishment?.name} · {q.establishment?.branch}</Text>
-                  </View>
-                  <View style={styles.waitingBadge}>
-                    <Text style={styles.waitingCount}>{q.waitingCount || 0}</Text>
-                    <Text style={styles.waitingLabel}>waiting</Text>
-                  </View>
-                </View>
-                <View style={styles.queueDetails}>
-                  <View style={styles.detailItem}>
-                    <Ionicons name="time-outline" size={14} color={COLORS.gray500} />
-                    <Text style={styles.detailText}>~{q.estimated_wait_mins || 15} min</Text>
-                  </View>
-                  <View style={styles.detailItem}>
-                    <Ionicons name="people-outline" size={14} color={COLORS.gray500} />
-                    <Text style={styles.detailText}>Capacity {q.capacity || 50}</Text>
-                  </View>
-                </View>
-                {q.description && (
-                  <Text style={styles.description}>{q.description}</Text>
-                )}
-                <TouchableOpacity
-                  style={styles.joinButton}
-                  onPress={() => handleJoin(q)}
-                  disabled={joining}
-                >
-                  <Text style={styles.joinButtonText}>
-                    {joining ? 'Joining...' : 'Join Queue'}
-                  </Text>
-                  <Ionicons name="arrow-forward" size={16} color={COLORS.white} />
-                </TouchableOpacity>
-              </View>
-            );
-          })
+          filteredGroups.map((group) => (
+            <View key={group.establishmentId}>
+              <BranchSectionHeader
+                brand={group.brand}
+                branch={group.branch}
+                queueCount={group.queues.length}
+              />
+              
+              {group.queues.map((queue) => {
+                const isThisQueue = activeQueue?.queue_id === queue.id;
+                const isServedToday = completedTodayQueueIds.includes(queue.id);
+                const isJoiningThis = joiningQueueId === queue.id;
+                const hasActiveElsewhere = !!activeQueue && !isThisQueue;
+
+                return (
+                  <CustomerQueueCard
+                    key={queue.id}
+                    queue={queue}  // ← queue now has isFull property
+                    onJoin={() => handleJoin(queue)}
+                    isUserQueue={isThisQueue}
+                    isServedToday={isServedToday}
+                    isJoining={isJoiningThis}
+                    hasActiveElsewhere={hasActiveElsewhere}
+                  />
+                );
+              })}
+            </View>
+          ))
         )}
+
+        {/* Footer */}
+        <View style={styles.footer}>
+          <Text style={styles.footerText}>BeeMacQueue CDO</Text>
+          <Text style={styles.footerSub}>Real-time queue management</Text>
+        </View>
       </ScrollView>
     </SafeScreen>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: COLORS.bg },
-  loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  loadingText: { fontSize: 16, color: COLORS.gray500 },
-  scroll: { flex: 1 },
-  scrollContent: { padding: 16, paddingBottom: 36 },
-  sectionLabel: {
+  container: {
+    flex: 1,
+    backgroundColor: '#F5F6FA',
+  },
+  centerContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
+  },
+  loadingText: {
     fontSize: 14,
-    fontWeight: '700',
-    color: COLORS.gray600,
-    marginBottom: 10,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
+    color: COLORS.gray500,
+    fontWeight: '500',
   },
-  emptyContainer: { alignItems: 'center', paddingVertical: 40 },
-  emptyTitle: { fontSize: 16, fontWeight: '700', color: COLORS.gray600, marginTop: 10 },
-  emptySub: { fontSize: 14, color: COLORS.gray400, marginTop: 4 },
-  queueCard: {
-    backgroundColor: COLORS.white,
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.03,
-    shadowRadius: 4,
-    elevation: 1,
+  scroll: {
+    flex: 1,
   },
-  queueHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
-  brandBadge: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: COLORS.gray100,
+  scrollContent: {
+    padding: 14,
+    paddingBottom: 36,
+  },
+  emptyContainer: {
     alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 10,
-  },
-  brandEmoji: { fontSize: 18 },
-  queueInfo: { flex: 1 },
-  queueName: { fontSize: 16, fontWeight: '700', color: COLORS.gray900 },
-  branchName: { fontSize: 12, color: COLORS.gray500, marginTop: 1 },
-  waitingBadge: { alignItems: 'center' },
-  waitingCount: { fontSize: 20, fontWeight: '800', color: COLORS.red },
-  waitingLabel: { fontSize: 9, color: COLORS.gray400, textTransform: 'uppercase' },
-  queueDetails: { flexDirection: 'row', gap: 16, marginBottom: 8 },
-  detailItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  detailText: { fontSize: 12, color: COLORS.gray600 },
-  description: { fontSize: 12, color: COLORS.gray500, marginBottom: 10 },
-  joinButton: {
-    flexDirection: 'row',
-    backgroundColor: COLORS.red,
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    borderRadius: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
+    paddingVertical: 40,
     gap: 8,
   },
-  joinButtonText: { color: COLORS.white, fontWeight: '700', fontSize: 14 },
+  emptyTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: COLORS.gray600,
+  },
+  emptySub: {
+    fontSize: 13,
+    color: COLORS.gray400,
+    textAlign: 'center',
+    paddingHorizontal: 20,
+  },
+  footer: {
+    marginTop: 20,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.gray200,
+    alignItems: 'center',
+  },
+  footerText: {
+    fontSize: 10,
+    color: COLORS.gray400,
+    fontWeight: '600',
+  },
+  footerSub: {
+    fontSize: 8,
+    color: COLORS.gray300,
+    marginTop: 2,
+  },
 });

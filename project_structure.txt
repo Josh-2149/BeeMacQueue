@@ -1,113 +1,148 @@
-## ✅ Final Project Structure
+Here's the complete updated project structure with comments and details:
+
+---
+
+## 📁 BeeMacQueue — Project Structure
 
 ```
 BeeMacQueue/
 │
-├── 📁 app/                          # Main application screens (Expo Router)
+├── 📁 app/                          # Main application screens (Expo Router file-based routing)
 │   │
-│   ├── 📁 (auth)/                   # Authentication routes
-│   │   ├── 📄 _layout.tsx
-│   │   ├── 📄 forgot-password.tsx
-│   │   ├── 📄 login.tsx
-│   │   └── 📄 register.tsx
+│   ├── 📁 (auth)/                   # Authentication routes (grouped layout)
+│   │   ├── 📄 _layout.tsx           # Auth layout wrapper
+│   │   ├── 📄 forgot-password.tsx   # Password reset screen
+│   │   ├── 📄 login.tsx             # Email, Google, Facebook sign-in
+│   │   └── 📄 register.tsx          # New account creation with role selection
 │   │
-│   ├── 📁 (customer)/               # Customer-facing routes
-│   │   ├── 📄 _layout.tsx
-│   │   ├── 📄 home.tsx
-│   │   ├── 📄 my-queue.tsx
-│   │   ├── 📄 notifications.tsx
-│   │   └── 📄 profile.tsx
+│   ├── 📁 (customer)/               # Customer-facing routes (bottom tabs)
+│   │   ├── 📄 _layout.tsx           # Customer tab bar: Home, My Queue, Alerts, Profile
+│   │   ├── 📄 home.tsx              ✏️ Browse queues grouped by branch, brand filter, join flow
+│   │   ├── 📄 my-queue.tsx          ✏️ Active ticket + history with delete/clear
+│   │   ├── 📄 notifications.tsx     ✏️ Real-time alerts grouped by date, tap to navigate
+│   │   └── 📄 profile.tsx           # Edit profile, sign out
 │   │
-│   ├── 📁 (staff)/                  # Staff/Admin routes
-│   │   ├── 📄 _layout.tsx
-│   │   ├── 📄 dashboard.tsx
-│   │   ├── 📄 my-queue.tsx
-│   │   ├── 📄 notifications.tsx
-│   │   └── 📄 profile.tsx
+│   ├── 📁 (staff)/                  # Staff/Admin routes (bottom tabs)
+│   │   ├── 📄 _layout.tsx           # Staff tab bar: Dashboard, My Queue, Alerts, Profile
+│   │   ├── 📄 dashboard.tsx         # Live queue monitor, create queue, serve/call/cancel
+│   │   ├── 📄 my-queue.tsx          # Manage queues (edit/delete), filter by queue
+│   │   ├── 📄 notifications.tsx     # Staff alerts for customer activity
+│   │   └── 📄 profile.tsx           # Staff profile management
 │   │
-│   └── 📄 _layout.tsx
+│   └── 📄 _layout.tsx               # Root layout: auth guard, role-based redirect
 │
-├── 📁 assets/                       # Static assets
-│   ├── 🖼️ adaptive-icon.png
-│   ├── 🖼️ icon.png
-│   └── 🖼️ splash.png
+├── 📁 assets/                       # Static assets (images, icons)
+│   ├── 🖼️ adaptive-icon.png         # Android adaptive icon
+│   ├── 🖼️ icon.png                 # App icon
+│   └── 🖼️ splash.png               # Splash screen image
 │
 ├── 📁 components/                   # Reusable UI components
-│   ├── 📄 CustomerHeader.tsx
-│   ├── 📄 StaffHeader.tsx
-│   ├── 📄 EstablishmentCard.tsx
-│   ├── 📄 FilterBar.tsx
-│   ├── 📄 JoinModal.tsx
-│   ├── 📄 NotificationBadge.tsx
-│   ├── 📄 PhosphorIcon.tsx
-│   ├── 📄 QueueTicketCard.tsx
-│   ├── 📄 SafeScreen.tsx
-│   ├── 📄 StaffQueueCard.tsx
-│   ├── 📄 StaffStatsCard.tsx
-│   └── 📄 ui.tsx
+│   ├── 🆕 BranchSectionHeader.tsx    # Groups queues under branch name with brand dot + count
+│   ├── ✏️ CustomerHeader.tsx         # 3-row header: Storefront icon + LiveDot + title + subtitle
+│   ├── 🆕 CustomerQueueCard.tsx      # Queue card with 6 states (Available, Your Queue, Served Today,
+│   │                                  #   Queue Full, Joining, In Another Queue) + capacity display
+│   ├── 📄 EstablishmentCard.tsx      # Branch listing card with brand emoji + queue stats
+│   ├── 📄 FilterBar.tsx             # Horizontal scrollable filter chips (All, Jollibee, McDonald's)
+│   ├── 📄 JoinModal.tsx             # Bottom sheet confirmation modal for joining queue
+│   ├── 📄 NotificationBadge.tsx     # Bell icon with unread count badge for tab bar
+│   ├── ✏️ PhosphorIcon.tsx           # Phosphor icon wrapper (60+ icons: XCircle, PlusCircle, etc.)
+│   ├── ✏️ QueueTicketCard.tsx        # Active ticket card: ticket numbers, progress bar, leave/refresh
+│   ├── 📄 SafeScreen.tsx            # SafeAreaView wrapper with configurable background
+│   ├── 📄 StaffHeader.tsx           # 3-row header: Storefront + LiveDot + title + subtitle + actions
+│   ├── 📄 StaffQueueCard.tsx        # Staff queue entry card: serve, call, cancel, complete actions
+│   ├── 📄 StaffStatsCard.tsx        # 4-stat grid: waiting, serving, today, total + serve next button
+│   └── 📄 ui.tsx                    # Shared primitives: Btn, Input, Badge, Card, SectionLabel, LiveDot
 │
-├── 📁 context/                      # React Context providers
-│   ├── 📄 NotificationContext.tsx
-│   ├── 📄 QueueContext.tsx
-│   └── 📄 StaffQueueContext.tsx
+├── 📁 context/                      # React Context providers (global state)
+│   ├── ✏️ NotificationContext.tsx    # Notification state: fetch, mark read, delete, clear, add
+│   ├── ✏️ QueueContext.tsx           # Customer queue: join (with capacity check), leave, active/history,
+│   │                                  #   completed-today tracking, staff/customer notifications
+│   └── 📄 StaffQueueContext.tsx      # Staff queue: waiting/serving/served lists, CRUD operations
 │
-├── 📁 hooks/                        # Custom React hooks
-│   ├── 📄 useAuth.ts
-│   ├── 📄 useCustomerQueues.ts
-│   ├── 📄 useEstablishments.ts
-│   ├── 📄 useNotifications.ts
-│   ├── 📄 useQueue.ts
-│   └── 📄 useStaffQueue.ts
+├── 📁 hooks/                        # Custom React hooks (business logic)
+│   ├── 📄 useAuth.ts               # Auth state: sign in/up/out, session, profile, role
+│   ├── ✏️ useCustomerQueues.ts      # Fetch all active queues, group by branch, calculate isFull
+│   ├── 📄 useEstablishments.ts      # CRUD for establishments with real-time subscriptions
+│   ├── ✏️ useNotifications.ts       # Notifications with shared channel (prevents duplicate subs),
+│   │                                  #   delete, clear, add with real-time INSERT/UPDATE/DELETE
+│   ├── 📄 useQueue.ts              # (Legacy) Queue hook
+│   └── ✏️ useStaffQueue.ts          # Staff queue operations: serve next, mark served, call, cancel,
+│                                      #   notify customers/staff on all actions
 │
 ├── 📁 lib/                          # Utilities and configuration
-│   ├── 📄 constants.ts
-│   └── 📄 supabase.ts
+│   ├── 📄 constants.ts             # Colors (red/yellow/green/blue), BRAND config, icon sizes
+│   └── 📄 supabase.ts              # Supabase client initialization (URL + anon key from env)
 │
 ├── 📁 types/                        # TypeScript type definitions
-│   └── 📄 index.ts
+│   └── 📄 index.ts                 # Interfaces: Profile, Establishment, Queue, QueueEntry,
+│                                      #   AppNotification, BrandType, QueueStatus, UserRole
 │
-├── 📄 .env
-├── 📄 .env.example
-├── 📄 .gitignore
-├── 📄 app.json
-├── 📄 babel.config.js
-├── 📄 debug.ts
-├── 📄 eslint.config.js
-├── 📄 package.json
-├── 📄 projectstructure.md
-├── 📄 README.md
-├── 📄 test-supabase.js
-├── 📄 TODO.md
-└── 📄 tsconfig.json
+├── 📄 .env                          # Environment variables (Supabase URL, anon key, service role)
+├── 📄 .env.example                  # Template for .env without secrets
+├── 📄 .gitignore                    # Git ignore rules
+├── 📄 app.json                      # Expo configuration (name, slug, version, plugins)
+├── 📄 babel.config.js               # Babel configuration
+├── 📄 debug.ts                      # Debug utilities
+├── 📄 eslint.config.js              # ESLint configuration
+├── 📄 package.json                  # Dependencies: expo, supabase, phosphor-react-native, etc.
+├── 📄 projectstructure.md           # This file — project structure documentation
+├── 📄 README.md                     # Project overview, setup instructions, features
+├── 📄 test-supabase.js              # Supabase connection test script
+├── 📄 TODO.md                       # Development roadmap and pending tasks
+└── 📄 tsconfig.json                 # TypeScript configuration
 ```
 
 ---
 
-## 📝 Summary of All Files
+## 📝 Summary of All Changes (Current Git Status)
 
-### 🆕 New Files Added
+### 🆕 New Files Added (Untracked)
 | File | Purpose |
 |------|---------|
-| `components/CustomerHeader.tsx` | Red header for customer screens |
-| `hooks/useCustomerQueues.ts` | Fetches all active queues for customers |
+| `components/BranchSectionHeader.tsx` | Groups queues under branch headers with colored brand dot, branch name, and queue count badge |
+| `components/CustomerQueueCard.tsx` | Customer-facing queue card with **6 visual states**: Available (red Join), Your Queue (green), Served Today (blue), Queue Full (orange + "FULL" badge + capacity X/Y), Joining (gray spinner), In Another Queue (gray). Uses dynamic Phosphor icons based on queue name (Crown/Star/Rocket/Clock/Queue) |
 
-### ✅ Updated Files
-| File | Changes |
-|------|---------|
-| `app/(customer)/home.tsx` | Now shows all queues with waiting counts |
-| `app/(staff)/dashboard.tsx` | Create queue with proper fields |
-| `app/(staff)/my-queue.tsx` | Full CRUD with edit/delete |
-| `components/StaffQueueCard.tsx` | Shows queue name and actions |
-| `context/QueueContext.tsx` | Fixed joinQueue with queue_id |
-| `context/StaffQueueContext.tsx` | Passes queues array |
-| `hooks/useAuth.ts` | Fixed profile duplication bug |
-| `hooks/useStaffQueue.ts` | Full CRUD with notifications |
-| `types/index.ts` | Added Queue interface |
+### ✏️ Modified Files (11 files)
+| File | Key Changes |
+|------|-------------|
+| `app/(customer)/home.tsx` | Queues grouped by branch via `BranchSectionHeader`, brand filter with `FilterBar`, capacity-aware cards, proper loading/empty states with Phosphor icons, prevents join when queue full |
+| `app/(customer)/my-queue.tsx` | Uses new `CustomerHeader` component, Phosphor icons for status badges (Clock/UserCircle/CheckCircle/X), delete individual history items, clear all button, brand dots instead of emojis, shows served time for completed entries |
+| `app/(customer)/notifications.tsx` | Full redesign: `CustomerHeader` with mark-all-read button, grouped by date (Today/Yesterday/This Week/Earlier) with counts, 10 notification categories with unique icons/colors, priority badges, tap to navigate to My Queue for "Your Turn", long-press to delete, action bar for mark all read + clear read |
+| `components/CustomerHeader.tsx` | Matches `StaffHeader` pattern exactly: Row 1 = Storefront icon + "BeeMacQueue" + LiveDot, Row 2 = title + optional right element, Row 3 = subtitle |
+| `components/PhosphorIcon.tsx` | Added 3 missing icon imports: `XCircle` (cancelled notifications), `PlusCircle` (new queue notifications), `WarningOctagon` (priority badges) |
+| `components/QueueTicketCard.tsx` | Zero emojis — all Phosphor icons: Storefront (branch), Users (ahead count), Clock (wait time), MapPin (address), Queue (queue name), ArrowsClockwise (refresh), SignOut (leave), CheckCircle (your turn), ArrowRight (your turn badge) |
+| `context/NotificationContext.tsx` | Added `deleteOne` and `clearAllRead` to context type, passes through from hook |
+| `context/QueueContext.tsx` | **Fixed ticket numbering**: counts only waiting+serving (not MAX). **Capacity check**: blocks join when currentCount >= capacity. **Notifications**: notifies customer on join/leave, notifies all staff on customer join/leave. **Completed-today tracking**: prevents re-joining same queue same day |
+| `hooks/useCustomerQueues.ts` | Added `servingCount`, `isFull` calculation (waiting + serving >= capacity), `groupedQueues` by establishment, real-time updates on both queues and queue_entries tables |
+| `hooks/useNotifications.ts` | **Fixed channel race condition**: single shared channel per userId via `sharedStateMap` with mutex lock, prevents "cannot add callbacks after subscribe" error. Added `deleteOne`, `clearAllRead` functions |
+| `hooks/useStaffQueue.ts` | Staff actions now notify: **customers** on serve/call/cancel/complete, **all customers in branch** on queue create/delete, **other staff** on all actions. `markServed` allows manual complete from both staff and customer side |
 
-### 📁 Removed Files
-| File | Reason |
-|------|--------|
-| `supabase-setup.sql` | Database already set up in Supabase |
+---
+
+## 🔔 Complete Notification Flow
+
+| Action | Who Gets Notified |
+|--------|------------------|
+| Customer joins queue | ✅ Customer (self) + ✅ All Staff |
+| Customer leaves queue | ✅ Customer (self) + ✅ All Staff |
+| Staff creates queue | ✅ All Customers in branch + ✅ All Staff |
+| Staff serves next | ✅ The specific Customer being served |
+| Staff marks served | ✅ The specific Customer |
+| Staff cancels customer | ✅ The specific Customer |
+| Staff calls customer | ✅ The specific Customer |
+
+---
+
+## 🎨 Customer Queue Card States
+
+| State | Button Text | Color | Condition |
+|-------|------------|-------|-----------|
+| Available | **Join Queue** ➜ | Red | Queue not full, user not in any queue |
+| Your Queue | ✓ **Your Queue** | Green | User is actively in this queue |
+| Served Today | ✓ **Served Today** | Blue | User completed this queue today |
+| **Queue Full** | **Queue Full** ⚠ | Orange | waiting + serving >= capacity |
+| Joining | **Joining...** ⌛ | Gray | Currently processing join request |
+| In Another Queue | **In Another Queue** | Gray | User has active queue elsewhere |
 
 ---
 
@@ -115,11 +150,26 @@ BeeMacQueue/
 
 ```cmd
 git add .
-git commit -m "feat: Complete queue system with real-time notifications
-- Add CustomerHeader and useCustomerQueues
-- Full staff CRUD with edit/delete
-- Real-time notifications for all events
-- Fix auth profile duplication
-- Customer home shows all branch queues"
+git commit -m "feat: Complete queue system v2 — capacity, notifications, UI overhaul
+
+New Components:
+- BranchSectionHeader: Group queues by branch
+- CustomerQueueCard: 6-state card with capacity display
+
+Customer POV:
+- Home: Queues grouped by branch, brand filter, queue full states
+- My Queue: Phosphor icons, delete/clear history, CustomerHeader
+- Notifications: Date grouping, priority badges, navigate to ticket
+
+Staff POV:
+- Real-time customer/staff notifications on all actions
+- Manual mark served from any status
+
+Fixes:
+- Ticket numbering: counts waiting+serving only (not MAX)
+- Capacity check: blocks join when queue full
+- Notifications channel: mutex lock prevents duplicate subscriptions
+- PhosphorIcon: Added XCircle, PlusCircle, WarningOctagon
+- All emojis replaced with Phosphor icons"
 git push origin main
 ```

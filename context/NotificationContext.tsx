@@ -10,6 +10,8 @@ type NotificationContextType = {
   fetchNotifications: () => void;
   markAllRead: () => void;
   markOneRead: (id: string) => void;
+  deleteOne: (id: string) => Promise<void>;
+  clearAllRead: () => Promise<void>;
   addNotification: (data: {
     user_id: string;
     title: string;
@@ -27,6 +29,8 @@ const NotificationContext = createContext<NotificationContextType>({
   fetchNotifications: () => {},
   markAllRead: () => {},
   markOneRead: () => {},
+  deleteOne: async () => {},
+  clearAllRead: async () => {},
   addNotification: async () => false,
 });
 
@@ -36,7 +40,6 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
   const userId = user?.id;
   
-  // ✅ Only call useNotifications when we have a userId
   const notificationData = useNotifications(userId);
   const instanceId = useRef(++providerCount);
   

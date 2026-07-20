@@ -1,219 +1,164 @@
-# 🍔 BeeMacQueue CDO
+# 🍔 BeeMacQueue
 
-**Real-time queue management for Jollibee & McDonald's branches in Cagayan de Oro City**
+> "Because nobody should waste their lunch break staring at a counter."
 
-Built with React Native · Expo · Supabase · TypeScript
+We've all been there — standing in a crowded Jollibee or McDonald's, clutching a number, unsure if you'll get your meal in 5 minutes or 25. Time slips away. Your break ends. You settle for something cold.
 
----
+BeeMacQueue changes that.
 
-## ✅ Features
+Born in the busy streets of Cagayan de Oro City, this app puts the power back in your hands. See the queue before you walk in. Join from your phone. Get notified when it's your turn. Spend those extra minutes however you want — not glued to a ticket number.
 
-- 🔐 Email, Google & Facebook authentication
-- 🎫 Real-time queue joining and tracking
-- 📊 Live queue progress with estimated wait times
-- 🔔 Real-time push notifications (served, cancelled)
-- 🛡️ Admin dashboard with live queue monitor
-- 🏬 10 CDO branches — Jollibee & McDonald's
-- 📱 Works on Android, iOS, and Web browser
-- ⚡ 100% real-time via Supabase websockets
+For the hardworking crew behind the counter, BeeMacQueue brings calm to the chaos. Manage your branch with clarity. Call customers with a tap. Focus on what matters: serving hot meals with a smile.
+
+Real-time queue management for Jollibee and McDonald's branches in CDO. Built with ❤️ and a lot of chickenjoy cravings.
+
+Built with Expo, React Native, Expo Router, Supabase, and TypeScript.
 
 ---
 
-## 🚀 Step-by-Step Setup
+## ✅ What this app does
 
-### Step 1 — Prerequisites
+- 🔐 Email, Google, and Facebook authentication
+- 🎫 Customers can browse branches, join a queue, and track their ticket status
+- 🧑‍💼 Staff can manage queue entries, serve customers, and monitor branch activity
+- 🔔 Real-time notifications for queue updates and service completion
+- 📱 Supports mobile and web experiences through Expo
+- 🏬 Uses branch-based queue flows for Jollibee and McDonald’s locations in CDO
 
-Make sure these are installed:
+---
 
-```cmd
-node --version    # Must be v18 or higher
+## 🛠️ Tech stack
+
+- React Native + Expo SDK 56
+- Expo Router for navigation
+- Supabase for authentication, database, and realtime updates
+- TypeScript
+- Async storage and secure storage for session persistence
+- Expo Notifications, Image Picker, and Web Browser support
+
+---
+
+## 🚀 Local setup
+
+### 1. Prerequisites
+
+Make sure the following are installed:
+
+```bash
+node --version
 npm --version
 git --version
 ```
 
-Install Expo CLI globally:
-```cmd
-npm install -g expo-cli eas-cli
-```
+### 2. Create a Supabase project
 
----
+1. Create a project at Supabase
+2. Copy your project URL and anon key from Settings → API
+3. Create a .env file in the project root using the example file
 
-### Step 2 — Create Supabase Project
-
-1. Go to **supabase.com** → Sign up → New project
-2. Name: `BeeMacQueue`, Region: `Southeast Asia (Singapore)`
-3. Wait ~2 minutes for it to initialize
-4. Go to **Settings → API** and copy:
-   - `Project URL`
-   - `anon / public` key
-
----
-
-### Step 3 — Run the SQL Setup Script
-
-1. In your Supabase project → **SQL Editor → New Query**
-2. Open `supabase-setup.sql` from this project
-3. Paste the entire contents and click **Run**
-4. This creates all tables, RLS policies, realtime, and seeds all 10 CDO branches
-
----
-
-### Step 4 — Enable OAuth Providers
-
-**Google:**
-1. Supabase → Authentication → Providers → Google → Enable
-2. Go to console.cloud.google.com → APIs & Services → Credentials
-3. Create OAuth 2.0 Client ID (Web application)
-4. Add redirect URI: `https://your-project.supabase.co/auth/v1/callback`
-5. Paste Client ID + Secret into Supabase
-
-**Facebook:**
-1. Supabase → Authentication → Providers → Facebook → Enable
-2. Go to developers.facebook.com → My Apps → Create App
-3. Add "Facebook Login" product
-4. Add redirect URI: `https://your-project.supabase.co/auth/v1/callback`
-5. Paste App ID + App Secret into Supabase
-
----
-
-### Step 5 — Configure Environment
-
-Create a `.env` file in the project root:
-
-```
+```env
 EXPO_PUBLIC_SUPABASE_URL=https://your-project-id.supabase.co
-EXPO_PUBLIC_SUPABASE_ANON_KEY=your-anon-key-here
+EXPO_PUBLIC_SUPABASE_ANON_KEY=your-anon-public-key-here
 ```
 
----
+### 3. Install dependencies
 
-### Step 6 — Install Dependencies
-
-```cmd
-cd BeeMacQueue
+```bash
 npm install
 ```
 
----
+### 4. Run the app
 
-### Step 7 — Run the App
+Web:
 
-**Web browser:**
-```cmd
-npx expo start --web
-```
-Opens at http://localhost:8081
-
-**Android phone (Expo Go):**
-```cmd
-npx expo start
-```
-Install Expo Go from Play Store → Scan QR code
-
-**Android emulator:**
-```cmd
-npx expo start --android
+```bash
+npm run web
 ```
 
----
+Android/iOS:
 
-### Step 8 — Build for Web (Deploy)
-
-```cmd
-npx expo export --platform web
+```bash
+npm start
 ```
 
-Output goes to `dist/` folder. Deploy with:
+### 5. Optional: enable OAuth providers
 
-```cmd
-# Vercel
-npx vercel --prod
+If you want Google or Facebook sign-in, enable those providers in Supabase Authentication and configure the redirect URL:
 
-# Netlify
-netlify deploy --dir dist --prod
+```text
+https://your-project.supabase.co/auth/v1/callback
 ```
 
 ---
 
-### Step 9 — Build Android APK
+## 📁 Project structure
 
-```cmd
-eas login
-eas build:configure
-eas build -p android --profile preview
-```
+The current app uses Expo Router route groups instead of a legacy tabs folder.
 
-Download APK from expo.dev dashboard.
-
----
-
-## 📁 File Structure
-
-```
-BeeMacQueue/
-├── app/
-│   ├── _layout.tsx           ← Root layout + auth guard
-│   ├── (auth)/
-│   │   ├── login.tsx         ← Email + Google + Facebook login
-│   │   ├── register.tsx      ← Account creation
-│   │   └── forgot-password.tsx
-│   └── (tabs)/
-│       ├── _layout.tsx       ← Bottom tab bar
-│       ├── home.tsx          ← Browse & join queues
-│       ├── my-queue.tsx      ← Active ticket + history
-│       ├── notifications.tsx ← Real-time alerts
-│       ├── profile.tsx       ← Edit profile, change password
-│       └── admin.tsx         ← Admin-only dashboard
-├── components/
-│   ├── ui.tsx                ← Shared UI primitives
-│   ├── EstablishmentCard.tsx ← Branch listing card
-│   ├── QueueTicketCard.tsx   ← Active ticket with progress
-│   ├── JoinModal.tsx         ← Join queue confirmation
-│   └── FilterBar.tsx         ← Brand/status filter chips
-├── hooks/
-│   ├── useAuth.ts            ← Auth state + operations
-│   ├── useEstablishments.ts  ← Branches + realtime
-│   ├── useQueue.ts           ← Queue join/leave + realtime
-│   ├── useNotifications.ts   ← Notifications + realtime
-│   └── useAdminQueue.ts      ← Admin live queue monitor
-├── lib/
-│   ├── supabase.ts           ← Supabase client
-│   └── constants.ts          ← Colors, brand config, branches
-├── types/
-│   └── index.ts              ← TypeScript interfaces
-├── supabase-setup.sql        ← Full DB setup script
-├── app.json                  ← Expo config
-├── package.json
-└── .env.example
+```text
+app/
+  _layout.tsx
+  (auth)/
+    login.tsx
+    register.tsx
+    forgot-password.tsx
+  (customer)/
+    home.tsx
+    my-queue.tsx
+    notifications.tsx
+    profile.tsx
+  (staff)/
+    dashboard.tsx
+    my-queue.tsx
+    notifications.tsx
+    profile.tsx
+components/
+context/
+hooks/
+lib/
+types/
 ```
 
 ---
 
-## ⚡ Real-time Architecture
+## 🧱 Database notes
 
-Every hook uses Supabase websocket channels:
+The repository includes a schema reference in [database_schema.txt](database_schema.txt), but there is no single SQL setup script file in the project at the moment. You will need to create the required Supabase tables and policies based on your own setup flow.
 
-| Hook | Channel | Listens to |
-|------|---------|-----------|
-| `useEstablishments` | `realtime:establishments` | INSERT / UPDATE / DELETE on establishments |
-| `useQueue` | `realtime:queue:{userId}` | User's own queue entry changes |
-| `useQueue` | `realtime:est-for-queue:{userId}` | Establishment updates for ticket progress |
-| `useNotifications` | `realtime:notifs:{userId}` | New notifications for user |
-| `useAdminQueue` | `realtime:admin-queue` | All queue entry changes |
+The app expects tables such as:
 
-When any admin serves a ticket → customer sees notification instantly.
-When anyone joins a queue → queue count updates on everyone's screen instantly.
-
----
-
-## 🏬 CDO Branches Included
-
-**Jollibee:** Divisoria, Limketkai, Carmen, Cogon, Gaisano City  
-**McDonald's:** Divisoria, Limketkai, Gaisano City, SM CDO, Centrio
+- profiles
+- establishments
+- queue_entries
+- notifications
+- queue_settings
+- staff_activity_log
+- wait_time_history
 
 ---
 
-## 👥 User Roles
+## 🔧 Useful scripts
 
-- **Customer** — Browse branches, join queue, track ticket, view history
-- **Admin** — All customer features + manage branches, serve tickets, reset queues
+```bash
+npm start
+npm run web
+npm run android
+npm run ios
+npm run build:web
+npm run lint
+```
+
+---
+
+## 👥 User roles
+
+- Customer: browse branches, join queues, view notifications, and track their ticket
+- Staff: manage branch queue activity, serve customers, and review queue status
+
+---
+
+## 💡 Notes
+
+- The app is designed around real-time Supabase subscriptions for queue and notification updates.
+- Authentication is handled through Supabase and the app routes users to either the customer or staff experience based on their profile role.
+- The README here reflects the current project structure and available screens in this repository.

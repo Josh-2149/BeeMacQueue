@@ -1,11 +1,12 @@
-Here's the updated project structure for the current workspace, including the files that were previously missing from the outline.
-
----
-
 ## 📁 BeeMacQueue — Project Structure
 
 ```text
 BeeMacQueue/
+├── .expo/
+├── .git/
+├── .env
+├── .env.example
+├── .gitignore
 ├── app/
 │   ├── (auth)/
 │   │   ├── _layout.tsx
@@ -29,10 +30,10 @@ BeeMacQueue/
 ├── assets/
 │   ├── adaptive-icon.png
 │   ├── brand_logos/
-│   │   └── (brand assets)
-│   ├── facebook.png
-│   ├── google.png
+│   │   ├── jollibee.jpeg
+│   │   └── mcdo.jpeg
 │   ├── icon.png
+│   ├── logo.jpg
 │   └── splash.png
 │
 ├── components/
@@ -44,6 +45,7 @@ BeeMacQueue/
 │   ├── FilterBar.tsx
 │   ├── JoinModal.tsx
 │   ├── NotificationBadge.tsx
+│   ├── Particles.tsx
 │   ├── PhosphorIcon.tsx
 │   ├── QueueTicketCard.tsx
 │   ├── RemoteImage.tsx
@@ -75,15 +77,14 @@ BeeMacQueue/
 ├── types/
 │   └── index.ts
 │
-├── .env
-├── .env.example
-├── .gitignore
+├── node_modules/
 ├── app.json
 ├── babel.config.js
 ├── database_schema.txt
 ├── debug.ts
 ├── eslint.config.js
 ├── expo-env.d.ts
+├── package-lock.json
 ├── package.json
 ├── project_structure.txt
 ├── README.md
@@ -92,7 +93,5 @@ BeeMacQueue/
 └── tsconfig.json
 ```
 
----
-
-## ✅ Notes
-The structure now includes the files that were missing from the earlier version, including the brand assets folder, the context helpers, the shared types file, and the environment/schema metadata files.
+✅ Notes
+The structure now includes the files and folders that are present in the workspace, including the additional asset files, the brand logo images, and the lockfile.

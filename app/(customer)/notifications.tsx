@@ -7,8 +7,9 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   RefreshControl,
-  Alert,
 } from 'react-native';
+import { useToast } from '../../context/ToastContext';
+import { useConfirm } from '../../context/ConfirmContext';
 import { useRouter } from 'expo-router';
 import { useNotification } from '../../context/NotificationContext';
 import { SafeScreen } from '../../components/SafeScreen';
@@ -18,7 +19,7 @@ import { COLORS } from '../../lib/constants';
 import { AppNotification } from '../../types';
 import { PhosphorIcon } from '../../components/PhosphorIcon';
 
-console.log('👤 [Customer Notifications] Screen mounted');
+console.log('[Customer Notifications] Screen mounted');
 
 // ── Notification Type Configuration ───────────────────────────────────────
 type NotifCategory = 
@@ -268,7 +269,7 @@ function EmptyNotifications() {
 
 // ── Main Component ───────────────────────────────────────────────────────
 export default function CustomerNotificationsScreen() {
-  console.log('👤 [Customer Notifications] Rendering');
+  console.log('[Customer Notifications] Rendering');
   const router = useRouter();
   const {
     notifications,
@@ -283,6 +284,8 @@ export default function CustomerNotificationsScreen() {
 
   const [refreshing, setRefreshing] = useState(false);
   const [deletingIds, setDeletingIds] = useState<Set<string>>(new Set());
+  const { showToast } = useToast();
+  const { showConfirm } = useConfirm();
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -323,68 +326,61 @@ export default function CustomerNotificationsScreen() {
     }
   }, [markOneRead, router]);
 
-  const handleDelete = useCallback((id: string) => {
-    Alert.alert(
-      'Delete Notification',
-      'Remove this notification permanently?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            setDeletingIds((prev) => new Set(prev).add(id));
-            await deleteOne(id);
-            setDeletingIds((prev) => {
-              const next = new Set(prev);
-              next.delete(id);
-              return next;
-            });
-          },
-        },
-      ]
-    );
-  }, [deleteOne]);
+  const handleDelete = useCallback(async (id: string) => {
+    const choice = await showConfirm({
+      title: 'Delete Notification',
+      message: 'Remove this notification permanently?',
+      options: [
+        { label: 'Cancel', style: 'cancel' },
+        { label: 'Delete', style: 'destructive' },
+      ],
+    });
 
-  const handleClearAll = useCallback(() => {
+    if (choice !== 'Delete') return;
+    setDeletingIds((prev) => new Set(prev).add(id));
+    await deleteOne(id);
+    setDeletingIds((prev) => {
+      const next = new Set(prev);
+      next.delete(id);
+      return next;
+    });
+  }, [deleteOne, showConfirm]);
+
+  const handleClearAll = useCallback(async () => {
     const readCount = notifications.filter((n) => n.is_read).length;
     if (readCount === 0) {
-      Alert.alert('Nothing to Clear', 'You have no read notifications to remove.');
+      showToast({ title: 'Nothing to Clear', message: 'You have no read notifications to remove.', variant: 'info' });
       return;
     }
 
-    Alert.alert(
-      'Clear Read Notifications',
-      `Remove all ${readCount} read notifications? This cannot be undone.`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Clear All',
-          style: 'destructive',
-          onPress: async () => {
-            await clearAllRead();
-          },
-        },
-      ]
-    );
-  }, [notifications, clearAllRead]);
+    const choice = await showConfirm({
+      title: 'Clear Read Notifications',
+      message: `Remove all ${readCount} read notifications? This cannot be undone.`,
+      options: [
+        { label: 'Cancel', style: 'cancel' },
+        { label: 'Clear All', style: 'destructive' },
+      ],
+    });
 
-  const handleMarkAllRead = useCallback(() => {
+    if (choice === 'Clear All') {
+      await clearAllRead();
+    }
+  }, [notifications, clearAllRead, showConfirm, showToast]);
+
+  const handleMarkAllRead = useCallback(async () => {
     if (unreadCount === 0) return;
-    Alert.alert(
-      'Mark All Read',
-      `Mark all ${unreadCount} unread notifications as read?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Mark All',
-          onPress: async () => {
-            await markAllRead();
-          },
-        },
-      ]
-    );
-  }, [unreadCount, markAllRead]);
+    const choice = await showConfirm({
+      title: 'Mark All Read',
+      message: `Mark all ${unreadCount} unread notifications as read?`,
+      options: [
+        { label: 'Cancel', style: 'cancel' },
+        { label: 'Mark All' },
+      ],
+    });
+    if (choice === 'Mark All') {
+      await markAllRead();
+    }
+  }, [unreadCount, markAllRead, showConfirm]);
 
   if (loading && notifications.length === 0) {
     return (

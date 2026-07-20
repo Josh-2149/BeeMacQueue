@@ -1,3 +1,4 @@
+// app/(customer)/my-queue.tsx
 import React, { useState } from 'react';
 import {
   View,
@@ -6,9 +7,10 @@ import {
   StyleSheet,
   ActivityIndicator,
   TouchableOpacity,
-  Alert,
 } from 'react-native';
 import { useQueueContext } from '../../context/QueueContext';
+import { useToast } from '../../context/ToastContext';
+import { useConfirm } from '../../context/ConfirmContext';
 import { QueueTicketCard } from '../../components/QueueTicketCard';
 import { SectionLabel } from '../../components/ui';
 import { SafeScreen } from '../../components/SafeScreen';
@@ -20,18 +22,30 @@ import { supabase } from '../../lib/supabase';
 
 console.log('👤 [Customer MyQueue] Screen mounted');
 
+// ✅ FIXED: Removed extra properties from cancelled
 const STATUS_CONFIG: Record<string, { color: string; bg: string; icon: string }> = {
   waiting:    { color: COLORS.blue,   bg: COLORS.blueLight,   icon: 'Clock' },
   serving:    { color: COLORS.orange, bg: COLORS.orangeLight, icon: 'UserCircle' },
   completed:  { color: COLORS.green,  bg: COLORS.greenLight,  icon: 'CheckCircle' },
-  cancelled: { icon: 'XCircle', color: '#DC2626', bg: '#FEF2F2', label: 'Cancelled', weight: 'fill' },
+  cancelled:  { color: '#DC2626',     bg: '#FEF2F2',          icon: 'XCircle' },
   no_show:    { color: COLORS.red,    bg: COLORS.redLight,    icon: 'WarningCircle' },
 };
 
 export default function CustomerMyQueueScreen() {
   console.log('👤 [Customer MyQueue] Rendering');
-  const { activeQueue, history, loading, leaveQueue, refreshActive } = useQueueContext();
+  const {
+    activeQueue,
+    history,
+    loading,
+    leaveQueue,
+    refreshActive,
+    peopleAhead,
+    isYourTurn,
+    estimatedWaitMins,
+  } = useQueueContext();
   const [deletingIds, setDeletingIds] = useState<Set<string>>(new Set());
+  const { showToast } = useToast();
+  const { showConfirm } = useConfirm();
 
   function formatDate(iso: string) {
     return new Date(iso).toLocaleString('en-PH', {
@@ -44,71 +58,66 @@ export default function CustomerMyQueueScreen() {
   }
 
   async function handleDeleteHistory(entryId: string) {
-    Alert.alert(
-      'Delete Entry',
-      'Remove this from your history? This cannot be undone.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { 
-          text: 'Delete', 
-          style: 'destructive',
-          onPress: async () => {
-            setDeletingIds((prev) => new Set(prev).add(entryId));
-            try {
-              const { error } = await supabase
-                .from('queue_entries')
-                .delete()
-                .eq('id', entryId);
+    const choice = await showConfirm({
+      title: 'Delete Entry',
+      message: 'Remove this from your history? This cannot be undone.',
+      options: [
+        { label: 'Cancel', style: 'cancel' },
+        { label: 'Delete', style: 'destructive' },
+      ],
+    });
 
-              if (error) throw error;
-              
-              await refreshActive();
-            } catch (err: any) {
-              Alert.alert('Error', err.message || 'Failed to delete entry');
-            } finally {
-              setDeletingIds((prev) => {
-                const next = new Set(prev);
-                next.delete(entryId);
-                return next;
-              });
-            }
-          }
-        },
-      ]
-    );
+    if (choice !== 'Delete') return;
+
+    setDeletingIds((prev) => new Set(prev).add(entryId));
+    try {
+      const { error } = await supabase
+        .from('queue_entries')
+        .delete()
+        .eq('id', entryId);
+
+      if (error) throw error;
+      await refreshActive();
+    } catch (err: any) {
+      showToast({ title: 'Error', message: err.message || 'Failed to delete entry', variant: 'error' });
+    } finally {
+      setDeletingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(entryId);
+        return next;
+      });
+    }
   }
 
   async function handleClearAllHistory() {
     if (history.length === 0) return;
 
-    Alert.alert(
-      'Clear All History',
-      `Remove all ${history.length} entries from your history?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Clear All',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              const userId = history[0]?.user_id;
-              if (!userId) return;
+    const choice = await showConfirm({
+      title: 'Clear All History',
+      message: `Remove all ${history.length} entries from your history?`,
+      options: [
+        { label: 'Cancel', style: 'cancel' },
+        { label: 'Clear All', style: 'destructive' },
+      ],
+    });
 
-              const { error } = await supabase
-                .from('queue_entries')
-                .delete()
-                .in('status', ['completed', 'cancelled'])
-                .eq('user_id', userId);
+    if (choice !== 'Clear All') return;
 
-              if (error) throw error;
-              await refreshActive();
-            } catch (err: any) {
-              Alert.alert('Error', err.message || 'Failed to clear history');
-            }
-          }
-        },
-      ]
-    );
+    try {
+      const userId = history[0]?.user_id;
+      if (!userId) return;
+
+      const { error } = await supabase
+        .from('queue_entries')
+        .delete()
+        .in('status', ['completed', 'cancelled'])
+        .eq('user_id', userId);
+
+      if (error) throw error;
+      await refreshActive();
+    } catch (err: any) {
+      showToast({ title: 'Error', message: err.message || 'Failed to clear history', variant: 'error' });
+    }
   }
 
   return (
@@ -131,6 +140,9 @@ export default function CustomerMyQueueScreen() {
               queue={activeQueue}
               onLeave={leaveQueue}
               onRefresh={refreshActive}
+              peopleAhead={peopleAhead}
+              isYourTurn={isYourTurn}
+              estimatedWaitMins={estimatedWaitMins}
             />
           </>
         ) : (

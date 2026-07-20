@@ -41,18 +41,12 @@ export function StaffQueueProvider({ children }: { children: ReactNode }) {
   console.log('🏪 [StaffQueueProvider] Creating singleton');
   
   const { user, profile, loading: authLoading } = useAuth();
-  const [isReady, setIsReady] = useState(false);
   
-  useEffect(() => {
-    if (!authLoading && profile && profile.role === 'staff') {
-      console.log('🏪 [StaffQueueProvider] ✅ Staff profile ready');
-      setIsReady(true);
-    }
-  }, [authLoading, profile]);
-
-  const staffId = (isReady && profile?.role === 'staff') ? user?.id : undefined;
+  // ✅ FIXED: Derive staffId directly — no stale isReady state
+  const staffId = (!authLoading && profile?.role === 'staff') ? user?.id : undefined;
   
   const queueData = useStaffQueue(staffId);
+  const providerKey = staffId || 'guest';
   
   const contextValue: StaffQueueContextType = {
     waitingList: queueData.waitingList || [],
@@ -81,11 +75,11 @@ export function StaffQueueProvider({ children }: { children: ReactNode }) {
   const instanceId = useRef(++staffQueueProviderCount);
   
   useEffect(() => {
-    console.log(`🏪 [StaffQueueProvider #${instanceId.current}] Initialized for staffId: ${staffId || 'none'}`);
-  }, [staffId]);
+    console.log(`🏪 [StaffQueueProvider #${instanceId.current}] Initialized for staffId: ${staffId || 'none'}, profile: ${profile?.name || 'none'}, role: ${profile?.role || 'none'}`);
+  }, [staffId, profile]);
 
   return (
-    <StaffQueueContext.Provider value={contextValue}>
+    <StaffQueueContext.Provider value={contextValue} key={providerKey}>
       {children}
     </StaffQueueContext.Provider>
   );

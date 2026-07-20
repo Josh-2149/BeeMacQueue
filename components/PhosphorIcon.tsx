@@ -1,3 +1,4 @@
+// components/PhosphorIcon.tsx
 import React from 'react';
 import { 
   Storefront,
@@ -20,8 +21,8 @@ import {
   ChartBar,
   MagnifyingGlass,
   X,
-  XCircle,          // 🆕 ADD THIS
-  PlusCircle,       // 🆕 ADD THIS
+  XCircle,
+  PlusCircle,
   Plus,
   Minus,
   Clock,
@@ -59,7 +60,14 @@ import {
   CaretRight,
   Rocket,
   Crown,
-  WarningOctagon,   // 🆕 ADD THIS (for priority badge)
+  WarningOctagon,
+  NotePencil,
+  PhoneCall,
+  IdentificationCard,
+  ChartLineUp,
+  Star as StarIcon,
+  AppWindow,
+  Wrench,
 } from 'phosphor-react-native';
 
 console.log('🔵 PhosphorIcon component loaded');
@@ -85,8 +93,8 @@ const iconMap = {
   ChartBar,
   MagnifyingGlass,
   X,
-  XCircle,          // 🆕 ADD THIS
-  PlusCircle,       // 🆕 ADD THIS
+  XCircle,
+  PlusCircle,
   Plus,
   Minus,
   Clock,
@@ -124,7 +132,14 @@ const iconMap = {
   CaretRight,
   Rocket,
   Crown,
-  WarningOctagon,   // 🆕 ADD THIS
+  WarningOctagon,
+  NotePencil,
+  PhoneCall,
+  IdentificationCard,
+  ChartLineUp,
+  StarIcon,
+  AppWindow,
+  Wrench,
 } as const;
 
 type IconName = keyof typeof iconMap;

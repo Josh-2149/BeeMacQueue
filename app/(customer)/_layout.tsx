@@ -1,8 +1,8 @@
 import { Tabs } from 'expo-router';
-import { House, Ticket, User } from 'phosphor-react-native';
+import { House, Ticket, Bell, User } from 'phosphor-react-native';
 import { View, Text } from 'react-native';
 import { COLORS, ICON_COLOR, ICON_SIZE } from '../../lib/constants';
-import { NotificationBadge } from '../../components/NotificationBadge';
+import { useNotification } from '../../context/NotificationContext';
 
 console.log('👤 [Customer] Layout mounted');
 
@@ -13,12 +13,41 @@ export default function CustomerLayout() {
     return <Icon size={ICON_SIZE} color={focused ? ICON_COLOR.active : ICON_COLOR.inactive} weight={focused ? 'fill' : 'regular'} />;
   }
 
-  const tabs = [
-    { name: 'home', title: 'Home', icon: House },
-    { name: 'my-queue', title: 'My Queue', icon: Ticket },
-    { name: 'notifications', title: 'Alerts', notif: true },
-    { name: 'profile', title: 'Profile', icon: User },
-  ];
+  // 🆕 Notification icon with badge
+  function NotificationTabIcon({ focused }: { focused: boolean }) {
+    const { unreadCount } = useNotification();
+    return (
+      <View>
+        <Bell 
+          size={ICON_SIZE} 
+          color={focused ? ICON_COLOR.active : ICON_COLOR.inactive} 
+          weight={focused ? 'fill' : 'regular'} 
+        />
+        {unreadCount > 0 && (
+          <View style={{
+            position: 'absolute',
+            top: -4,
+            right: -8,
+            backgroundColor: COLORS.red,
+            borderRadius: 10,
+            minWidth: 18,
+            height: 18,
+            alignItems: 'center',
+            justifyContent: 'center',
+            paddingHorizontal: 4,
+          }}>
+            <Text style={{
+              color: COLORS.white,
+              fontSize: 10,
+              fontWeight: '800',
+            }}>
+              {unreadCount > 99 ? '99+' : unreadCount}
+            </Text>
+          </View>
+        )}
+      </View>
+    );
+  }
 
   return (
     <Tabs
@@ -37,21 +66,34 @@ export default function CustomerLayout() {
         tabBarLabelStyle: { fontSize: 10, fontWeight: '700' },
       }}
     >
-      {tabs.map((tab) => (
-        <Tabs.Screen
-          key={tab.name}
-          name={tab.name}
-          options={{
-            title: tab.title,
-            tabBarIcon: ({ focused }) => 
-              tab.notif ? (
-                <NotificationBadge focused={focused} />
-              ) : (
-                <TabIcon icon={tab.icon} focused={focused} />
-              ),
-          }}
-        />
-      ))}
+      <Tabs.Screen
+        name="home"
+        options={{
+          title: 'Home',
+          tabBarIcon: ({ focused }) => <TabIcon icon={House} focused={focused} />,
+        }}
+      />
+      <Tabs.Screen
+        name="my-queue"
+        options={{
+          title: 'My Queue',
+          tabBarIcon: ({ focused }) => <TabIcon icon={Ticket} focused={focused} />,
+        }}
+      />
+      <Tabs.Screen
+        name="notifications"
+        options={{
+          title: 'Alerts',
+          tabBarIcon: ({ focused }) => <NotificationTabIcon focused={focused} />,
+        }}
+      />
+      <Tabs.Screen
+        name="profile"
+        options={{
+          title: 'Profile',
+          tabBarIcon: ({ focused }) => <TabIcon icon={User} focused={focused} />,
+        }}
+      />
     </Tabs>
   );
 }

@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { Profile } from '../types';
+import * as FileSystem from 'expo-file-system/legacy';
 
 console.log('🔐 [useAuth] Module loaded');
 
@@ -14,8 +15,70 @@ export function useAuth() {
   const [loading, setLoading] = useState(true);
   const [initialized, setInitialized] = useState(false);
 
+  // ✅ DYNAMIC: Auto-create establishment if it doesn't exist
+  const ensureEstablishment = async (brand: string, branch: string, userId: string): Promise<boolean> => {
+    const normalizedBrand = (brand || '').trim().toLowerCase();
+    const normalizedBranch = (branch || '').trim();
+
+    if (!normalizedBrand || !normalizedBranch) {
+      console.log('🔐 [useAuth] ⚠️ Skipping establishment creation because brand or branch is missing');
+      return false;
+    }
+
+    const { data: existing } = await supabase
+      .from('establishments')
+      .select('id')
+      .eq('brand', normalizedBrand)
+      .eq('branch', normalizedBranch)
+      .maybeSingle();
+
+    if (existing) {
+      console.log(`🔐 [useAuth] 🏢 Establishment already exists: ${normalizedBrand} - ${normalizedBranch}`);
+      return true;
+    }
+
+    const brandNames: Record<string, string> = {
+      jollibee: 'Jollibee',
+      mcdo: "McDonald's",
+      kfc: 'KFC',
+      chowking: 'Chowking',
+      mang_inasal: 'Mang Inasal',
+    };
+
+    const deriveDisplayName = (inputBrand: string): string => {
+      const match = brandNames[inputBrand.toLowerCase()];
+      if (match) return match;
+      return inputBrand
+        .trim()
+        .replace(/[_-]+/g, ' ')
+        .split(/\s+/)
+        .filter(Boolean)
+        .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+        .join(' ');
+    };
+
+    const displayName = deriveDisplayName(brand);
+
+    console.log(`🔐 [useAuth] 🏢 Creating establishment: ${displayName} - ${normalizedBranch}`);
+    const { error } = await supabase
+      .from('establishments')
+      .insert({
+        brand: normalizedBrand,
+        name: displayName,
+        branch: normalizedBranch,
+        created_by: userId,
+      });
+
+    if (error) {
+      console.log('🔐 [useAuth] ⚠️ Failed to create establishment:', error.message);
+      return false;
+    }
+    
+    console.log('🔐 [useAuth] ✅ Establishment auto-created successfully');
+    return true;
+  };
+
   const ensureProfile = async (userId: string, email: string): Promise<Profile | null> => {
-    // First check if profile exists
     const { data, error } = await supabase
       .from('profiles')
       .select('*')
@@ -27,13 +90,14 @@ export function useAuth() {
       return null;
     }
 
-    // If profile exists, return it immediately - DON'T create a new one
     if (data) {
       console.log(`🔐 [useAuth] Profile already exists: role=${data.role}`);
+      if (data.role === 'staff' && data.brand && data.branch) {
+        await ensureEstablishment(data.brand, data.branch, data.id);
+      }
       return data as Profile;
     }
 
-    // Only create if NO profile exists (first time login)
     console.log('🔐 [useAuth] No profile found, creating one with role=customer');
     const newProfile: Profile = {
       id: userId,
@@ -59,6 +123,19 @@ export function useAuth() {
   };
 
   useEffect(() => {
+    if (!user || profile?.role !== 'staff') return;
+
+    const updateLastActive = () => {
+      supabase.from('profiles').update({ last_active: new Date().toISOString() }).eq('id', user.id).then(() => {});
+    };
+
+    updateLastActive();
+
+    const interval = setInterval(updateLastActive, 60000);
+    return () => clearInterval(interval);
+  }, [user?.id, profile?.role]);
+
+  useEffect(() => {
     console.log('🔐 [useAuth] useEffect START');
     let isMounted = true;
     
@@ -66,38 +143,39 @@ export function useAuth() {
       try {
         console.log('🔐 [useAuth] Getting session...');
         const { data: { session }, error } = await supabase.auth.getSession();
+        if (!isMounted) return;
+
         if (error) {
           console.log('🔐 [useAuth] Session error:', error.message);
-          if (isMounted) {
-            setSession(null);
-            setUser(null);
-            setProfile(null);
-            setLoading(false);
-            setInitialized(true);
-          }
+          setSession(null);
+          setUser(null);
+          setProfile(null);
+          setLoading(false);
+          setInitialized(true);
           return;
         }
+
         console.log('🔐 [useAuth] Session:', session ? `✅ Active (${session.user?.email})` : '❌ None');
-        if (isMounted) {
-          setSession(session);
-          setUser(session?.user || null);
-          if (session?.user) {
-            console.log(`🔐 [useAuth] User found: ${session.user.email}`);
-            const profileData = await ensureProfile(session.user.id, session.user.email!);
-            setProfile(profileData);
-            console.log(`🔐 [useAuth] Profile loaded: role=${profileData?.role || 'none'}`);
-          } else {
-            setProfile(null);
-          }
-          setLoading(false);
-          setInitialized(true);
+        setSession(session);
+        setUser(session?.user || null);
+
+        if (session?.user) {
+          console.log(`🔐 [useAuth] User found: ${session.user.email}`);
+          const profileData = await ensureProfile(session.user.id, session.user.email!);
+          if (!isMounted) return;
+          setProfile(profileData);
+          console.log(`🔐 [useAuth] Profile loaded: role=${profileData?.role || 'none'}`);
+        } else {
+          setProfile(null);
         }
+
+        setLoading(false);
+        setInitialized(true);
       } catch (err) {
         console.log('🔐 [useAuth] Load error:', err);
-        if (isMounted) {
-          setLoading(false);
-          setInitialized(true);
-        }
+        if (!isMounted) return;
+        setLoading(false);
+        setInitialized(true);
       }
     };
 
@@ -107,22 +185,29 @@ export function useAuth() {
       async (event, newSession) => {
         console.log(`🔐 [useAuth] Auth event: ${event}`);
         if (!isMounted) return;
-        setSession(newSession);
-        setUser(newSession?.user || null);
+
         if (event === 'SIGNED_OUT') {
-          setProfile(null);
+          setSession(null);
           setUser(null);
+          setProfile(null);
           setLoading(false);
           setInitialized(true);
           return;
         }
+
+        setSession(newSession);
+        setUser(newSession?.user || null);
+
         if (newSession?.user) {
           const profileData = await ensureProfile(newSession.user.id, newSession.user.email!);
+          if (!isMounted) return;
           setProfile(profileData);
           console.log(`🔐 [useAuth] Profile updated: role=${profileData?.role || 'none'}`);
         } else {
           setProfile(null);
         }
+
+        if (!isMounted) return;
         setLoading(false);
         setInitialized(true);
       }
@@ -176,6 +261,16 @@ export function useAuth() {
       if (!data.user) {
         return { success: false, error: 'No user created' };
       }
+
+      // ✅ STEP 1: Create establishment FIRST and WAIT for it
+      if (role === 'staff' && brand && branch) {
+        const estCreated = await ensureEstablishment(brand, branch, data.user.id);
+        if (!estCreated) {
+          console.log('🔐 [useAuth] ⚠️ Establishment creation failed, but continuing...');
+        }
+      }
+
+      // ✅ STEP 2: Create profile
       const profileData: Profile = {
         id: data.user.id,
         name: name.trim(),
@@ -189,6 +284,7 @@ export function useAuth() {
         phone_number: undefined,
         staff_id: undefined,
       };
+
       const { error: pe } = await supabase.from('profiles').insert(profileData);
       if (pe) {
         console.log('🔐 [useAuth] ❌ Profile error:', pe.message);
@@ -197,6 +293,15 @@ export function useAuth() {
           return { success: false, error: upsertError.message };
         }
       }
+
+      // ✅ STEP 3: Immediately set profile so _layout.tsx sees the correct role
+      // This prevents the customer POV flash and ensures StaffQueueProvider gets the right data
+      setProfile(profileData);
+      setSession(data.session);
+      setUser(data.user);
+      setLoading(false);
+      setInitialized(true);
+
       console.log(`🔐 [useAuth] ✅ Profile created with role: ${role}`);
       return { success: true };
     } catch (err) {
@@ -246,6 +351,22 @@ export function useAuth() {
     }
   };
 
+  const signInWithGoogle = async () => {
+    try {
+      return { success: false, error: 'Google sign-in is not configured for this build yet.' };
+    } catch (err: any) {
+      return { success: false, error: err.message || 'Google sign-in failed' };
+    }
+  };
+
+  const signInWithFacebook = async () => {
+    try {
+      return { success: false, error: 'Facebook sign-in is not configured for this build yet.' };
+    } catch (err: any) {
+      return { success: false, error: err.message || 'Facebook sign-in failed' };
+    }
+  };
+
   const updatePassword = async (newPassword: string) => {
     try {
       const { error } = await supabase.auth.updateUser({ password: newPassword });
@@ -256,17 +377,80 @@ export function useAuth() {
     }
   };
 
+  const uploadAvatar = async (uri: string): Promise<string | null> => {
+    if (!session?.user) {
+      console.log('🔐 [useAuth] ❌ No session for avatar upload');
+      return null;
+    }
+    
+    try {
+      const fileExt = uri.split('.').pop()?.toLowerCase() || 'jpg';
+      const filePath = `${session.user.id}/avatar.${fileExt}`;
+      const mimeType = fileExt === 'jpg' ? 'image/jpeg' : fileExt === 'png' ? 'image/png' : `image/${fileExt}`;
+      
+      console.log('🔐 [useAuth] 📤 Uploading avatar...', { filePath, mimeType });
+      
+      const base64 = await FileSystem.readAsStringAsync(uri, {
+        encoding: 'base64',
+      });
+      
+      const binaryString = atob(base64);
+      const bytes = new Uint8Array(binaryString.length);
+      for (let i = 0; i < binaryString.length; i++) {
+        bytes[i] = binaryString.charCodeAt(i);
+      }
+      const arrayBuffer = bytes.buffer;
+      
+      const { error: uploadError } = await supabase.storage
+        .from('avatars')
+        .upload(filePath, arrayBuffer, {
+          contentType: mimeType,
+          upsert: true,
+        });
+      
+      if (uploadError) {
+        console.log('🔐 [useAuth] ❌ Upload error:', uploadError.message);
+        throw uploadError;
+      }
+      
+      const { data: { publicUrl } } = supabase.storage
+        .from('avatars')
+        .getPublicUrl(filePath);
+      
+      const { error: updateError } = await supabase
+        .from('profiles')
+        .update({ avatar_url: publicUrl })
+        .eq('id', session.user.id);
+      
+      if (updateError) {
+        console.log('🔐 [useAuth] ❌ Profile update error:', updateError.message);
+        throw updateError;
+      }
+      
+      await refreshProfile();
+      console.log('🔐 [useAuth] ✅ Avatar uploaded successfully');
+      
+      return publicUrl;
+    } catch (err: any) {
+      console.log('🔐 [useAuth] ❌ Avatar upload error:', err.message || JSON.stringify(err));
+      return null;
+    }
+  };
+
   return { 
     session, 
     user,
     profile, 
     loading, 
     initialized,
-    signIn, 
+    signIn,
+    signInWithGoogle,
+    signInWithFacebook,
     signUp, 
     signOut,
     refreshProfile,
     updateProfile,
     updatePassword,
+    uploadAvatar,
   };
 }

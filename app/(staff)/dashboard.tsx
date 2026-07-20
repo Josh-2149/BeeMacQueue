@@ -8,7 +8,6 @@ import {
   RefreshControl,
   TouchableOpacity,
   ActivityIndicator,
-  Alert,
   Modal,
   TextInput,
 } from 'react-native';
@@ -16,6 +15,8 @@ import { useRouter } from 'expo-router';
 import { useAuth } from '../../hooks/useAuth';
 import { useStaffQueueContext } from '../../context/StaffQueueContext';
 import { useNotification } from '../../context/NotificationContext';
+import { useToast } from '../../context/ToastContext';
+import { useConfirm } from '../../context/ConfirmContext';
 import { SafeScreen } from '../../components/SafeScreen';
 import { StaffStatsCard } from '../../components/StaffStatsCard';
 import { StaffQueueCard } from '../../components/StaffQueueCard';
@@ -67,11 +68,13 @@ export default function StaffDashboardScreen() {
     createQueue,
     getQueues,
   } = useStaffQueueContext();
+  const { showToast } = useToast();
+  const { showConfirm } = useConfirm();
 
   useEffect(() => {
     if (!authLoading && profile && profile.role !== 'staff') {
       console.log('🏪 [Staff Dashboard] 🚫 Not staff, redirecting');
-      Alert.alert('Access Denied', 'Staff only area');
+      showToast({ title: 'Access Denied', message: 'Staff only area', variant: 'error' });
       router.replace('/(customer)/home');
     }
   }, [profile, authLoading]);
@@ -86,40 +89,48 @@ export default function StaffDashboardScreen() {
   const handleServeNext = async () => {
     const success = await serveNext();
     if (!success) {
-      Alert.alert('No Waiting Customers', 'There are no customers in the waiting queue.');
+      showToast({ title: 'No Waiting Customers', message: 'There are no customers in the waiting queue.', variant: 'info' });
     }
   };
 
-  const handleMarkServed = (entryId: string) => {
-    Alert.alert(
-      'Mark as Served',
-      'Confirm this customer has been served?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Confirm', style: 'default', onPress: () => markServed(entryId) },
-      ]
-    );
+  const handleMarkServed = async (entryId: string) => {
+    const choice = await showConfirm({
+      title: 'Mark as Served',
+      message: 'Confirm this customer has been served?',
+      options: [
+        { label: 'Cancel', style: 'cancel' },
+        { label: 'Confirm', style: 'default' },
+      ],
+    });
+
+    if (choice === 'Confirm') {
+      await markServed(entryId);
+    }
   };
 
-  const handleCancelCustomer = (entryId: string) => {
-    Alert.alert(
-      'Remove Customer',
-      'Are you sure you want to remove this customer from the queue?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Remove', style: 'destructive', onPress: () => cancelCustomer(entryId) },
-      ]
-    );
+  const handleCancelCustomer = async (entryId: string) => {
+    const choice = await showConfirm({
+      title: 'Remove Customer',
+      message: 'Are you sure you want to remove this customer from the queue?',
+      options: [
+        { label: 'Cancel', style: 'cancel' },
+        { label: 'Remove', style: 'destructive' },
+      ],
+    });
+
+    if (choice === 'Remove') {
+      await cancelCustomer(entryId);
+    }
   };
 
-  const handleCallCustomer = (entryId: string) => {
-    callCustomer(entryId);
-    Alert.alert('✅ Customer Called', 'Notification has been sent to the customer.');
+  const handleCallCustomer = async (entryId: string) => {
+    await callCustomer(entryId);
+    showToast({ title: 'Customer Called', message: 'Notification has been sent to the customer.', variant: 'success' });
   };
 
   const handleCreateQueue = async () => {
     if (!queueName.trim()) {
-      Alert.alert('Error', 'Please enter a queue name');
+      showToast({ title: 'Error', message: 'Please enter a queue name', variant: 'error' });
       return;
     }
 
@@ -131,7 +142,7 @@ export default function StaffDashboardScreen() {
     });
 
     if (result.success) {
-      Alert.alert('✅ Queue Created!', `"${queueName}" queue is now active.`);
+      showToast({ title: 'Queue Created', message: `"${queueName}" queue is now active.`, variant: 'success' });
       setShowCreateModal(false);
       setQueueName('');
       setEstimatedWait('15');
@@ -155,7 +166,7 @@ export default function StaffDashboardScreen() {
       await refresh();
       await getQueues();
     } else {
-      Alert.alert('Error', result.error || 'Failed to create queue');
+      showToast({ title: 'Error', message: result.error || 'Failed to create queue', variant: 'error' });
     }
   };
 
@@ -230,7 +241,7 @@ export default function StaffDashboardScreen() {
     <SafeScreen style={styles.container}>
       <StaffHeader
         title="Dashboard"
-        subtitle={`${establishment?.name || 'No branch'} · ${establishment?.branch || ''}\n${profile.name}`}
+        subtitle={`${profile.brand?.toUpperCase() || 'Unknown'} — ${profile.branch || 'No branch'}\n${profile.name}`}
       />
 
       <ScrollView
@@ -375,6 +386,7 @@ export default function StaffDashboardScreen() {
                 key={entry.id}
                 entry={entry}
                 queueIcon={queueIcon}
+                createdByName={(entry as any).created_by_name || profile.name}
                 onServe={() => handleServeNext()}
                 onCall={() => handleCallCustomer(entry.id)}
                 onCancel={() => handleCancelCustomer(entry.id)}

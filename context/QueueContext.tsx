@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../hooks/useAuth';
 import { useNotifications } from '../hooks/useNotifications';
@@ -9,6 +9,9 @@ interface QueueContextType {
   history: QueueEntry[];
   loading: boolean;
   joining: boolean;
+  peopleAhead: number;
+  isYourTurn: boolean;
+  estimatedWaitMins: number;
   joinQueue: (queueId: string) => Promise<number>;
   leaveQueue: () => Promise<void>;
   refreshActive: () => Promise<void>;
@@ -23,8 +26,18 @@ export function QueueProvider({ children }: { children: ReactNode }) {
   const [history, setHistory] = useState<QueueEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [joining, setJoining] = useState(false);
+  const [peopleAhead, setPeopleAhead] = useState(0);
+  const [isYourTurn, setIsYourTurn] = useState(false);
+  const [estimatedWaitMins, setEstimatedWaitMins] = useState(0);
   const [completedTodayQueueIds, setCompletedTodayQueueIds] = useState<string[]>([]);
   const { addNotification } = useNotifications(user?.id);
+  const channelRef = useRef<any>(null);
+  const activeQueueRef = useRef<QueueEntry | null>(null);
+
+  // Keep a ref in sync so polling always has latest queue
+  useEffect(() => {
+    activeQueueRef.current = activeQueue;
+  }, [activeQueue]);
 
   const fetchCompletedToday = useCallback(async () => {
     if (!user) {
@@ -48,9 +61,45 @@ export function QueueProvider({ children }: { children: ReactNode }) {
     }
   }, [user]);
 
+  const calculatePosition = useCallback(async (entry: QueueEntry) => {
+    if (!entry.queue_id || !entry.id) {
+      setPeopleAhead(0);
+      setIsYourTurn(false);
+      setEstimatedWaitMins(0);
+      return;
+    }
+
+    try {
+      // Count how many waiting entries have a lower ticket_number in the same queue
+      const { count, error } = await supabase
+        .from('queue_entries')
+        .select('*', { count: 'exact', head: true })
+        .eq('queue_id', entry.queue_id)
+        .eq('status', 'waiting')
+        .lt('ticket_number', entry.ticket_number);
+
+      if (error) throw error;
+
+      const ahead = count || 0;
+      const isTurn = entry.status === 'serving' || ahead === 0;
+
+      setPeopleAhead(ahead);
+      setIsYourTurn(isTurn);
+
+      // Estimate wait time
+      const avgWait = entry.establishment?.avg_wait_mins ?? 5;
+      setEstimatedWaitMins(ahead * avgWait);
+    } catch (err) {
+      console.log('🎫 [QueueContext] Error calculating position:', err);
+    }
+  }, []);
+
   const fetchActive = useCallback(async () => {
     if (!user) {
       setActiveQueue(null);
+      setPeopleAhead(0);
+      setIsYourTurn(false);
+      setEstimatedWaitMins(0);
       setLoading(false);
       return;
     }
@@ -63,13 +112,23 @@ export function QueueProvider({ children }: { children: ReactNode }) {
         .order('created_at', { ascending: false })
         .maybeSingle();
       if (error) throw error;
-      setActiveQueue(data as QueueEntry | null);
+
+      const entry = data as QueueEntry | null;
+      setActiveQueue(entry);
+
+      if (entry) {
+        await calculatePosition(entry);
+      } else {
+        setPeopleAhead(0);
+        setIsYourTurn(false);
+        setEstimatedWaitMins(0);
+      }
     } catch (err) {
       console.log('🎫 [QueueContext] Error fetching active:', err);
     } finally {
       setLoading(false);
     }
-  }, [user]);
+  }, [user, calculatePosition]);
 
   const fetchHistory = useCallback(async () => {
     if (!user) {
@@ -91,24 +150,42 @@ export function QueueProvider({ children }: { children: ReactNode }) {
     }
   }, [user]);
 
-  const notifyStaffInBranch = useCallback(async (title: string, message: string) => {
+  const notifyStaffInBranch = useCallback(async (title: string, message: string, establishmentId?: string) => {
     if (!user || !profile) return;
     try {
-      const { data: staffMembers } = await supabase
-        .from('profiles')
-        .select('id')
-        .eq('role', 'staff');
-      if (staffMembers) {
-        for (const staff of staffMembers) {
-          await addNotification({
-            user_id: staff.id,
-            title,
-            message,
-            type: 'queue',
-            priority: 'high',
-            metadata: { customer_id: user.id, customer_name: profile.name || 'Customer', timestamp: new Date().toISOString() },
-          });
+      let staffMembers: any[] = [];
+      
+      if (establishmentId) {
+        const { data: est } = await supabase
+          .from('establishments')
+          .select('brand, branch')
+          .eq('id', establishmentId)
+          .single();
+        
+        if (est) {
+          const { data } = await supabase
+            .from('profiles')
+            .select('id')
+            .eq('role', 'staff')
+            .eq('brand', est.brand)
+            .eq('branch', est.branch);
+          staffMembers = data || [];
         }
+      }
+
+      for (const staff of staffMembers) {
+        await addNotification({
+          user_id: staff.id,
+          title,
+          message,
+          type: 'queue',
+          priority: 'high',
+          metadata: { 
+            customer_id: user.id, 
+            customer_name: profile.name || 'Customer', 
+            timestamp: new Date().toISOString() 
+          },
+        });
       }
     } catch (err) {
       console.log('🎫 Error notifying staff:', err);
@@ -141,7 +218,7 @@ export function QueueProvider({ children }: { children: ReactNode }) {
       .maybeSingle();
 
     if (completedToday) {
-      throw new Error('You have already been served in this queue today. Please try again tomorrow.');
+      throw new Error('You have already been served in this queue today.');
     }
 
     setJoining(true);
@@ -161,14 +238,12 @@ export function QueueProvider({ children }: { children: ReactNode }) {
 
       if (countErr) throw countErr;
 
-      // 🆕 CAPACITY CHECK
       const capacity = queueData.capacity || 50;
-      const currentCount = count || 0;
-      if (currentCount >= capacity) {
-        throw new Error(`Queue is full! Capacity: ${capacity}. Please try again later.`);
+      if ((count || 0) >= capacity) {
+        throw new Error(`Queue is full! Capacity: ${capacity}.`);
       }
 
-      const nextNumber = currentCount + 1;
+      const nextNumber = (count || 0) + 1;
 
       const { data, error } = await supabase
         .from('queue_entries')
@@ -195,7 +270,7 @@ export function QueueProvider({ children }: { children: ReactNode }) {
       await addNotification({
         user_id: user.id,
         title: '🎫 Joined Queue',
-        message: `You joined "${queueData.name}" at ${queueData.establishment?.name || 'branch'} — Ticket #${nextNumber}`,
+        message: `You joined "${queueData.name}" — Ticket #${nextNumber}`,
         type: 'queue',
         priority: 'high',
         metadata: { queue_id: queueId, ticket_number: nextNumber },
@@ -203,7 +278,8 @@ export function QueueProvider({ children }: { children: ReactNode }) {
 
       await notifyStaffInBranch(
         '👤 New Customer',
-        `${profile?.name || 'Customer'} joined "${queueData.name}" — Ticket #${nextNumber}`
+        `${profile?.name || 'Customer'} joined "${queueData.name}" — Ticket #${nextNumber}`,
+        queueData.establishment_id
       );
 
       await fetchActive();
@@ -239,10 +315,14 @@ export function QueueProvider({ children }: { children: ReactNode }) {
 
       await notifyStaffInBranch(
         '🚶 Customer Left',
-        `${profile?.name || 'Customer'} left "${activeQueue.queue?.name || 'queue'}" — Ticket #${activeQueue.ticket_number}`
+        `${profile?.name || 'Customer'} left queue`,
+        activeQueue.establishment_id
       );
 
       setActiveQueue(null);
+      setPeopleAhead(0);
+      setIsYourTurn(false);
+      setEstimatedWaitMins(0);
       await fetchHistory();
       await fetchCompletedToday();
     } catch (err) {
@@ -256,6 +336,7 @@ export function QueueProvider({ children }: { children: ReactNode }) {
     await fetchCompletedToday();
   }, [fetchActive, fetchHistory, fetchCompletedToday]);
 
+  // Initial load
   useEffect(() => {
     let isMounted = true;
     const loadData = async () => {
@@ -264,6 +345,8 @@ export function QueueProvider({ children }: { children: ReactNode }) {
           setActiveQueue(null);
           setHistory([]);
           setCompletedTodayQueueIds([]);
+          setPeopleAhead(0);
+          setIsYourTurn(false);
           setLoading(false);
         }
         return;
@@ -271,26 +354,68 @@ export function QueueProvider({ children }: { children: ReactNode }) {
       await Promise.all([fetchActive(), fetchHistory(), fetchCompletedToday()]);
     };
     loadData();
+  }, [user?.id]);
+
+  // Real-time: Listen to user's own queue entries
+  useEffect(() => {
     if (!user?.id) return;
+
+    if (channelRef.current) {
+      supabase.removeChannel(channelRef.current);
+    }
+
     const channel = supabase
       .channel(`queue-${user.id}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'queue_entries', filter: `user_id=eq.${user.id}` }, () => {
-        if (isMounted) {
-          fetchActive();
-          fetchHistory();
-          fetchCompletedToday();
-        }
+      .on('postgres_changes', { 
+        event: '*', 
+        schema: 'public', 
+        table: 'queue_entries', 
+        filter: `user_id=eq.${user.id}` 
+      }, () => {
+        fetchActive();
+        fetchHistory();
+        fetchCompletedToday();
       })
       .subscribe();
+
+    channelRef.current = channel;
+
     return () => {
-      isMounted = false;
-      supabase.removeChannel(channel);
+      if (channelRef.current) {
+        supabase.removeChannel(channelRef.current);
+        channelRef.current = null;
+      }
     };
   }, [user?.id]);
+
+  // Recalculate position when activeQueue changes
+  useEffect(() => {
+    if (activeQueue) {
+      calculatePosition(activeQueue);
+    }
+  }, [activeQueue, calculatePosition]);
+
+  // ✅ POLLING: Recalculate position every 5 seconds while active
+  useEffect(() => {
+    if (!activeQueue || !user?.id) return;
+
+    console.log('🎫 [QueueContext] 🔄 Starting position polling (5s interval)');
+    const interval = setInterval(async () => {
+      if (activeQueueRef.current) {
+        await calculatePosition(activeQueueRef.current);
+      }
+    }, 5000);
+
+    return () => {
+      console.log('🎫 [QueueContext] 🛑 Stopping position polling');
+      clearInterval(interval);
+    };
+  }, [activeQueue?.id, user?.id, calculatePosition]); // Restart polling when active queue changes
 
   return (
     <QueueContext.Provider value={{
       activeQueue, history, loading, joining,
+      peopleAhead, isYourTurn, estimatedWaitMins,
       joinQueue, leaveQueue, refreshActive, completedTodayQueueIds,
     }}>
       {children}

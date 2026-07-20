@@ -12,6 +12,7 @@ export interface Profile {
   branch?: string;          // Changed from string | null to string
   staff_id?: string;
   phone_number?: string;
+  last_active?: string | null;
   queues_joined: number;
   avatar_url?: string;
   created_at: string;
@@ -45,6 +46,8 @@ export interface Queue {
   estimated_wait_mins?: number;
   is_active?: boolean;
   created_at?: string;
+  created_by?: string;
+  created_by_name?: string;
   waitingCount?: number;
   servingCount?: number;
   establishment?: Establishment;

@@ -6,13 +6,13 @@ import {
   ScrollView,
   StyleSheet,
   RefreshControl,
-  Alert,
   ActivityIndicator,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuth } from '../../hooks/useAuth';
 import { useCustomerQueues } from '../../hooks/useCustomerQueues';
 import { useQueueContext } from '../../context/QueueContext';
+import { useToast } from '../../context/ToastContext';
 import { QueueTicketCard } from '../../components/QueueTicketCard';
 import { CustomerQueueCard } from '../../components/CustomerQueueCard';
 import { BranchSectionHeader } from '../../components/BranchSectionHeader';
@@ -30,7 +30,15 @@ export default function CustomerHomeScreen() {
   console.log('🏠 [Customer Home] Rendering');
   const router = useRouter();
   const { profile } = useAuth();
-  const { groupedQueues, loading, refresh: refreshQueues } = useCustomerQueues();
+  
+  const [selectedBrand, setSelectedBrand] = useState<string>('all');
+  const [refreshing, setRefreshing] = useState(false);
+  const [joiningQueueId, setJoiningQueueId] = useState<string | null>(null);
+
+  const { groupedQueues, loading, refresh: refreshQueues } = useCustomerQueues(
+    selectedBrand !== 'all' ? selectedBrand : undefined
+  );
+
   const {
     activeQueue,
     joining,
@@ -38,10 +46,11 @@ export default function CustomerHomeScreen() {
     leaveQueue,
     refreshActive,
     completedTodayQueueIds,
+    peopleAhead,
+    isYourTurn,
+    estimatedWaitMins,
   } = useQueueContext();
-  const [refreshing, setRefreshing] = useState(false);
-  const [selectedBrand, setSelectedBrand] = useState<string>('all');
-  const [joiningQueueId, setJoiningQueueId] = useState<string | null>(null);
+  const { showToast } = useToast();
 
   // Redirect staff to dashboard
   useEffect(() => {
@@ -59,8 +68,8 @@ export default function CustomerHomeScreen() {
   // Filter options for FilterBar
   const filterOptions = [
     { key: 'all', label: 'All' },
-    { key: 'jollibee', label: '🐝 Jollibee' },
-    { key: 'mcdo', label: '🍟 McDonald\'s' },
+    { key: 'jollibee', label: 'Jollibee' },
+    { key: 'mcdo', label: "McDonald's" },
   ];
 
   async function onRefresh() {
@@ -70,30 +79,18 @@ export default function CustomerHomeScreen() {
   }
 
   async function handleJoin(queue: Queue) {
-    // Already in this queue
     if (activeQueue?.queue_id === queue.id) {
-      Alert.alert(
-        'Already Here!',
-        `You're already in this queue with ticket #${activeQueue.ticket_number}.`
-      );
+      showToast({ title: 'Already Here!', message: `You're already in this queue with ticket #${activeQueue.ticket_number}.`, variant: 'info' });
       return;
     }
 
-    // Already served today
     if (completedTodayQueueIds.includes(queue.id)) {
-      Alert.alert(
-        'Served Today',
-        'You\'ve already been served in this queue today. Please come back tomorrow!'
-      );
+      showToast({ title: 'Served Today', message: 'You\'ve already been served in this queue today. Please come back tomorrow!', variant: 'warning' });
       return;
     }
 
-    // Has active queue elsewhere
     if (activeQueue) {
-      Alert.alert(
-        'Already in Queue',
-        `You have ticket #${activeQueue.ticket_number} at another queue. Leave it first to join here.`
-      );
+      showToast({ title: 'Already in Queue', message: `You have ticket #${activeQueue.ticket_number} at another queue. Leave it first to join here.`, variant: 'warning' });
       return;
     }
 
@@ -101,18 +98,14 @@ export default function CustomerHomeScreen() {
     try {
       const ticket = await joinQueue(queue.id);
       const branchName = queue.establishment?.name || 'branch';
-      Alert.alert(
-        '🎫 Joined!',
-        `Ticket #${ticket} for "${queue.name}" at ${branchName}.`
-      );
+      showToast({ title: '🎫 Joined!', message: `Ticket #${ticket} for "${queue.name}" at ${branchName}.`, variant: 'success' });
     } catch (e: any) {
-      Alert.alert('Could not join', e.message);
+      showToast({ title: 'Could not join', message: e.message, variant: 'error' });
     } finally {
       setJoiningQueueId(null);
     }
   }
 
-  // Loading state
   if (loading && !refreshing) {
     return (
       <SafeScreen style={styles.container}>
@@ -147,7 +140,7 @@ export default function CustomerHomeScreen() {
         }
         showsVerticalScrollIndicator={false}
       >
-        {/* Active Ticket Section */}
+        {/* ✅ Active Ticket — now passes position props */}
         {activeQueue && (
           <>
             <SectionLabel>Your Active Ticket</SectionLabel>
@@ -155,21 +148,21 @@ export default function CustomerHomeScreen() {
               queue={activeQueue}
               onLeave={leaveQueue}
               onRefresh={refreshActive}
+              peopleAhead={peopleAhead}
+              isYourTurn={isYourTurn}
+              estimatedWaitMins={estimatedWaitMins}
             />
           </>
         )}
 
-        {/* Available Queues Section */}
         <SectionLabel>Available Queues</SectionLabel>
 
-        {/* Brand Filter */}
         <FilterBar
           filters={filterOptions}
           active={selectedBrand}
           onSelect={setSelectedBrand}
         />
 
-        {/* Queue Groups by Branch */}
         {filteredGroups.length === 0 ? (
           <View style={styles.emptyContainer}>
             <PhosphorIcon icon="Queue" size={48} color={COLORS.gray300} weight="bold" />
@@ -198,7 +191,8 @@ export default function CustomerHomeScreen() {
                 return (
                   <CustomerQueueCard
                     key={queue.id}
-                    queue={queue}  // ← queue now has isFull property
+                    queue={queue}
+                    createdByName={queue.created_by_name || undefined}
                     onJoin={() => handleJoin(queue)}
                     isUserQueue={isThisQueue}
                     isServedToday={isServedToday}
@@ -211,7 +205,6 @@ export default function CustomerHomeScreen() {
           ))
         )}
 
-        {/* Footer */}
         <View style={styles.footer}>
           <Text style={styles.footerText}>BeeMacQueue CDO</Text>
           <Text style={styles.footerSub}>Real-time queue management</Text>

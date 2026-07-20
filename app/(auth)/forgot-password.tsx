@@ -1,11 +1,12 @@
 import { useState } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet,
-  TextInput, ActivityIndicator, Alert,
+  TextInput, ActivityIndicator,
   KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { supabase } from '../../lib/supabase';
+import { useToast } from '../../context/ToastContext';
 import { COLORS } from '../../lib/constants';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { PhosphorIcon } from '../../components/PhosphorIcon';
@@ -17,15 +18,16 @@ export default function ForgotPasswordScreen() {
   const [loading, setLoading] = useState(false);
   const [sent, setSent] = useState(false);
   const [focused, setFocused] = useState(false);
+  const { showToast } = useToast();
 
   async function handleReset() {
-    if (!email.trim()) { Alert.alert('Error', 'Please enter your email address'); return; }
+    if (!email.trim()) { showToast({ title: 'Error', message: 'Please enter your email address', variant: 'error' }); return; }
     setLoading(true);
     const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
       redirectTo: 'beemacqueue://auth/reset',
     });
     setLoading(false);
-    if (error) Alert.alert('Error', error.message);
+    if (error) showToast({ title: 'Error', message: error.message, variant: 'error' });
     else setSent(true);
   }
 

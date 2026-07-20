@@ -1,4 +1,5 @@
-import { View, Text, TouchableOpacity, StyleSheet, Alert } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { useConfirm } from '../context/ConfirmContext';
 import { QueueEntry } from '../types';
 import { COLORS, BRAND } from '../lib/constants';
 import { PhosphorIcon } from './PhosphorIcon';
@@ -7,32 +8,38 @@ interface Props {
   queue: QueueEntry;
   onLeave: () => void;
   onRefresh: () => void;
+  peopleAhead: number;
+  isYourTurn: boolean;
+  estimatedWaitMins: number;
 }
 
-export function QueueTicketCard({ queue, onLeave, onRefresh }: Props) {
+export function QueueTicketCard({ queue, onLeave, onRefresh, peopleAhead, isYourTurn, estimatedWaitMins }: Props) {
+  const { showConfirm } = useConfirm();
   const est = queue.establishment;
   const brand = est?.brand ? BRAND[est.brand] : null;
   const ticket = queue.ticket_number;
-  const serving = est?.next_serving ?? 1;
-  const ahead = Math.max(0, ticket - serving);
-  const isNext = ahead === 0;
-  const estWait = ahead * (est?.avg_wait_mins ?? 5);
-  const total = Math.max(ticket, est?.current_queue ?? ticket);
-  const progress = Math.min(97, Math.max(5, ((ticket - ahead) / Math.max(total, 1)) * 100));
 
-  function confirmLeave() {
-    Alert.alert(
-      'Leave Queue?',
-      "You'll lose your spot and can't get it back.",
-      [
-        { text: 'Stay', style: 'cancel' },
-        { text: 'Leave', style: 'destructive', onPress: onLeave },
-      ]
-    );
+  // ✅ FIXED: Progress based on actual people ahead + your position
+  const totalAhead = peopleAhead + 1; // you + people ahead
+  const progress = totalAhead > 0 
+    ? Math.min(97, Math.max(5, ((totalAhead - peopleAhead) / Math.max(totalAhead, 1)) * 100))
+    : 50;
+
+  async function confirmLeave() {
+    const choice = await showConfirm({
+      title: 'Leave Queue?',
+      message: "You'll lose your spot and can't get it back.",
+      options: [
+        { label: 'Stay', style: 'cancel' },
+        { label: 'Leave', style: 'destructive' },
+      ],
+    });
+
+    if (choice === 'Leave') onLeave();
   }
 
   return (
-    <View style={[styles.card, isNext && styles.cardActive]}>
+    <View style={[styles.card, isYourTurn && styles.cardActive]}>
       {/* Brand Header */}
       <View style={[styles.brandHeader, { backgroundColor: brand?.color ?? COLORS.red }]}>
         <View style={styles.brandHeaderLeft}>
@@ -41,7 +48,7 @@ export function QueueTicketCard({ queue, onLeave, onRefresh }: Props) {
             {est?.name} · {est?.branch}
           </Text>
         </View>
-        {isNext && (
+        {isYourTurn && (
           <View style={styles.yourTurnBadge}>
             <PhosphorIcon icon="ArrowRight" size={12} color={COLORS.yellow} weight="bold" />
             <Text style={styles.yourTurnText}>YOUR TURN</Text>
@@ -50,23 +57,32 @@ export function QueueTicketCard({ queue, onLeave, onRefresh }: Props) {
       </View>
 
       <View style={styles.body}>
-        {/* Ticket Numbers */}
+        {/* Ticket Number + Status */}
         <View style={styles.ticketRow}>
           <View style={styles.ticketBlock}>
             <Text style={styles.ticketLabel}>YOUR TICKET</Text>
             <View style={styles.ticketNumRow}>
               <Text style={styles.ticketHash}>#</Text>
-              <Text style={styles.ticketNum}>{ticket}</Text>
+              <Text style={[styles.ticketNum, isYourTurn && { color: COLORS.green }]}>
+                {ticket}
+              </Text>
             </View>
           </View>
 
           <View style={styles.ticketDivider} />
 
           <View style={styles.ticketBlock}>
-            <Text style={styles.servingLabel}>NOW SERVING</Text>
-            <View style={styles.ticketNumRow}>
-              <Text style={styles.servingHash}>#</Text>
-              <Text style={styles.servingNum}>{serving}</Text>
+            <Text style={styles.servingLabel}>STATUS</Text>
+            <View style={styles.statusBadge}>
+              <PhosphorIcon 
+                icon={isYourTurn ? 'CheckCircle' : 'Clock'} 
+                size={18} 
+                color={isYourTurn ? COLORS.green : COLORS.red} 
+                weight="fill" 
+              />
+              <Text style={[styles.statusText, { color: isYourTurn ? COLORS.green : COLORS.red }]}>
+                {isYourTurn ? 'SERVING' : 'WAITING'}
+              </Text>
             </View>
           </View>
         </View>
@@ -77,7 +93,7 @@ export function QueueTicketCard({ queue, onLeave, onRefresh }: Props) {
             styles.progressFill,
             {
               width: `${progress}%` as any,
-              backgroundColor: isNext ? COLORS.green : COLORS.red,
+              backgroundColor: isYourTurn ? COLORS.green : COLORS.red,
             },
           ]} />
         </View>
@@ -86,21 +102,23 @@ export function QueueTicketCard({ queue, onLeave, onRefresh }: Props) {
         <View style={styles.progressInfo}>
           <View style={styles.progressInfoItem}>
             <PhosphorIcon icon="Users" size={14} color={COLORS.gray500} weight="bold" />
-            <Text style={styles.progressText}>{ahead} ahead</Text>
+            <Text style={styles.progressText}>
+              {peopleAhead === 0 ? 'No one ahead' : `${peopleAhead} ahead`}
+            </Text>
           </View>
           <View style={styles.progressInfoItem}>
-            <PhosphorIcon icon="Clock" size={14} color={isNext ? COLORS.green : COLORS.red} weight="bold" />
+            <PhosphorIcon icon="Clock" size={14} color={isYourTurn ? COLORS.green : COLORS.red} weight="bold" />
             <Text style={[
               styles.progressTextBold,
-              { color: isNext ? COLORS.green : COLORS.red },
+              { color: isYourTurn ? COLORS.green : COLORS.red },
             ]}>
-              {isNext ? 'Head to counter!' : `~${estWait} min${estWait !== 1 ? 's' : ''}`}
+              {isYourTurn ? 'Head to counter!' : `~${estimatedWaitMins} min${estimatedWaitMins !== 1 ? 's' : ''}`}
             </Text>
           </View>
         </View>
 
-        {/* Next Alert */}
-        {isNext && (
+        {/* Turn Alert */}
+        {isYourTurn && (
           <View style={styles.turnAlert}>
             <PhosphorIcon icon="CheckCircle" size={16} color={COLORS.green} weight="fill" />
             <Text style={styles.turnAlertText}>
@@ -239,17 +257,18 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     marginBottom: 4,
   },
-  servingHash: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: COLORS.gray600,
-    marginRight: 1,
+  statusBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    borderRadius: 8,
   },
-  servingNum: {
-    fontSize: 36,
+  statusText: {
+    fontSize: 14,
     fontWeight: '800',
-    color: COLORS.gray700,
-    letterSpacing: -1,
+    letterSpacing: -0.5,
   },
   progressTrack: {
     backgroundColor: COLORS.gray100,

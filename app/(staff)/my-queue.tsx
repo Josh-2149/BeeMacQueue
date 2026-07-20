@@ -7,7 +7,6 @@ import {
   StyleSheet,
   RefreshControl,
   TouchableOpacity,
-  Alert,
   ActivityIndicator,
   Modal,
   TextInput,
@@ -19,12 +18,14 @@ import {
 import { useRouter } from 'expo-router';
 import { useAuth } from '../../hooks/useAuth';
 import { useStaffQueueContext } from '../../context/StaffQueueContext';
+import { useToast } from '../../context/ToastContext';
+import { useConfirm } from '../../context/ConfirmContext';
 import { SafeScreen } from '../../components/SafeScreen';
 import { StaffHeader } from '../../components/StaffHeader';
 import { StaffQueueCard } from '../../components/StaffQueueCard';
 import { SectionLabel } from '../../components/ui';
 import { COLORS } from '../../lib/constants';
-import { Ionicons } from '@expo/vector-icons';
+import { PhosphorIcon } from '../../components/PhosphorIcon';
 
 console.log('🏪 [Staff MyQueue] Screen mounted');
 
@@ -58,11 +59,13 @@ export default function StaffMyQueueScreen() {
     updateQueue,
     deleteQueue,
   } = useStaffQueueContext();
+  const { showToast } = useToast();
+  const { showConfirm } = useConfirm();
 
   useEffect(() => {
     if (!authLoading && profile && profile.role !== 'staff') {
       console.log('🏪 [Staff MyQueue] 🚫 Not staff, redirecting');
-      Alert.alert('Access Denied', 'Staff only area');
+      showToast({ title: 'Access Denied', message: 'Staff only area', variant: 'error' });
       router.replace('/(customer)/home');
     }
   }, [profile, authLoading]);
@@ -76,35 +79,43 @@ export default function StaffMyQueueScreen() {
   const handleServeNext = async (queueId?: string) => {
     const success = await serveNext(queueId);
     if (!success) {
-      Alert.alert('No Waiting Customers', 'There are no customers in the waiting queue.');
+      showToast({ title: 'No Waiting Customers', message: 'There are no customers in the waiting queue.', variant: 'info' });
     }
   };
 
-  const handleMarkServed = (entryId: string) => {
-    Alert.alert(
-      'Mark as Served',
-      'Confirm this customer has been served?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Confirm', style: 'default', onPress: () => markServed(entryId) },
-      ]
-    );
+  const handleMarkServed = async (entryId: string) => {
+    const choice = await showConfirm({
+      title: 'Mark as Served',
+      message: 'Confirm this customer has been served?',
+      options: [
+        { label: 'Cancel', style: 'cancel' },
+        { label: 'Confirm', style: 'default' },
+      ],
+    });
+
+    if (choice === 'Confirm') {
+      await markServed(entryId);
+    }
   };
 
-  const handleCancelCustomer = (entryId: string) => {
-    Alert.alert(
-      'Remove Customer',
-      'Are you sure you want to remove this customer from the queue?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Remove', style: 'destructive', onPress: () => cancelCustomer(entryId) },
-      ]
-    );
+  const handleCancelCustomer = async (entryId: string) => {
+    const choice = await showConfirm({
+      title: 'Remove Customer',
+      message: 'Are you sure you want to remove this customer from the queue?',
+      options: [
+        { label: 'Cancel', style: 'cancel' },
+        { label: 'Remove', style: 'destructive' },
+      ],
+    });
+
+    if (choice === 'Remove') {
+      await cancelCustomer(entryId);
+    }
   };
 
-  const handleCallCustomer = (entryId: string) => {
-    callCustomer(entryId);
-    Alert.alert('✅ Customer Called', 'Notification has been sent to the customer.');
+  const handleCallCustomer = async (entryId: string) => {
+    await callCustomer(entryId);
+    showToast({ title: 'Customer Called', message: 'Notification has been sent to the customer.', variant: 'success' });
   };
 
   const handleEditQueue = (queue: any) => {
@@ -117,7 +128,7 @@ export default function StaffMyQueueScreen() {
 
   const handleSaveEdit = async () => {
     if (!editName.trim()) {
-      Alert.alert('Error', 'Please enter a queue name');
+      showToast({ title: 'Error', message: 'Please enter a queue name', variant: 'error' });
       return;
     }
 
@@ -128,33 +139,35 @@ export default function StaffMyQueueScreen() {
     });
 
     if (result.success) {
-      Alert.alert('✅ Queue Updated', `"${editName}" has been updated.`);
+      showToast({ title: 'Queue Updated', message: `"${editName}" has been updated.`, variant: 'success' });
       setShowEditModal(false);
       setEditingQueue(null);
       Keyboard.dismiss();
       await refresh();
     } else {
-      Alert.alert('Error', result.error || 'Failed to update queue');
+      showToast({ title: 'Error', message: result.error || 'Failed to update queue', variant: 'error' });
     }
   };
 
-  const handleDeleteQueue = (queue: any) => {
-    Alert.alert(
-      'Delete Queue',
-      `Are you sure you want to delete "${queue.name}"? This will remove it from customer view.`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Delete', style: 'destructive', onPress: async () => {
-          const result = await deleteQueue(queue.id);
-          if (result.success) {
-            Alert.alert('✅ Queue Deleted', `"${queue.name}" has been deleted.`);
-            await refresh();
-          } else {
-            Alert.alert('Error', result.error || 'Failed to delete queue');
-          }
-        }},
-      ]
-    );
+  const handleDeleteQueue = async (queue: any) => {
+    const choice = await showConfirm({
+      title: 'Delete Queue',
+      message: `Are you sure you want to delete "${queue.name}"? This will remove it from customer view.`,
+      options: [
+        { label: 'Cancel', style: 'cancel' },
+        { label: 'Delete', style: 'destructive' },
+      ],
+    });
+
+    if (choice !== 'Delete') return;
+
+    const result = await deleteQueue(queue.id);
+    if (result.success) {
+      showToast({ title: 'Queue Deleted', message: `"${queue.name}" has been deleted.`, variant: 'success' });
+      await refresh();
+    } else {
+      showToast({ title: 'Error', message: result.error || 'Failed to delete queue', variant: 'error' });
+    }
   };
 
   const getFilteredList = () => {
@@ -182,7 +195,7 @@ export default function StaffMyQueueScreen() {
     return (
       <SafeScreen style={styles.container}>
         <View style={styles.accessDenied}>
-          <Ionicons name="warning-outline" size={64} color={COLORS.red} />
+          <PhosphorIcon icon="Warning" size={64} color={COLORS.red} />
           <Text style={styles.accessTitle}>Access Denied</Text>
           <Text style={styles.accessSub}>Staff only area</Text>
           <TouchableOpacity style={styles.accessButton} onPress={() => router.replace('/(customer)/home')}>
@@ -197,10 +210,10 @@ export default function StaffMyQueueScreen() {
 
   return (
     <SafeScreen style={styles.container}>
-      <StaffHeader
-        title="My Queue"
-        subtitle={`${establishment?.name || 'No branch'} · ${establishment?.branch || ''}\n${profile.name}`}
-      />
+    <StaffHeader
+      title="My Queue"
+      subtitle={`${profile.brand?.toUpperCase() || 'Unknown'} — ${profile.branch || 'No branch'}\n${profile.name}`}
+    />
 
       <ScrollView
         style={styles.scroll}
@@ -210,82 +223,57 @@ export default function StaffMyQueueScreen() {
       >
         {/* Queue Statistics */}
         <View style={styles.statsRow}>
-          <View style={styles.statCard}>
-            <Text style={styles.statNumber}>{stats.totalWaiting}</Text>
+          <View style={[styles.statCard, { borderLeftColor: COLORS.blue }]}>
+            <PhosphorIcon icon="Clock" size={18} color={COLORS.blue} weight="bold" />
+            <Text style={[styles.statNumber, { color: COLORS.blue }]}>{stats.totalWaiting}</Text>
             <Text style={styles.statLabel}>Waiting</Text>
           </View>
-          <View style={styles.statCard}>
-            <Text style={styles.statNumber}>{stats.totalServing}</Text>
+          <View style={[styles.statCard, { borderLeftColor: COLORS.orange }]}>
+            <PhosphorIcon icon="UserCircle" size={18} color={COLORS.orange} weight="bold" />
+            <Text style={[styles.statNumber, { color: COLORS.orange }]}>{stats.totalServing}</Text>
             <Text style={styles.statLabel}>Serving</Text>
           </View>
-          <View style={styles.statCard}>
-            <Text style={styles.statNumber}>{stats.totalServed}</Text>
-            <Text style={styles.statLabel}>Served Today</Text>
+          <View style={[styles.statCard, { borderLeftColor: COLORS.green }]}>
+            <PhosphorIcon icon="CheckCircle" size={18} color={COLORS.green} weight="bold" />
+            <Text style={[styles.statNumber, { color: COLORS.green }]}>{stats.totalServed}</Text>
+            <Text style={styles.statLabel}>Served</Text>
           </View>
         </View>
 
         {/* Queue List - All queues for this branch */}
         {queues && queues.length > 0 && (
           <View style={styles.queuesSection}>
-            <Text style={styles.sectionTitle}>Manage Queues</Text>
+            <Text style={styles.sectionTitle}>Active Queues</Text>
             {queues.map((q) => {
               const waitingCount = waitingList.filter((e) => e.queue_id === q.id).length;
+              const isSelected = selectedQueue === q.id;
               return (
-                <View key={q.id} style={styles.queueItem}>
-                  <View style={styles.queueItemLeft}>
-                    <Text style={styles.queueItemName}>{q.name}</Text>
-                    <Text style={styles.queueItemMeta}>
-                      {waitingCount} waiting · ~{q.estimated_wait_mins || 15}min · {q.capacity || 50} cap
-                    </Text>
+                <TouchableOpacity
+                  key={q.id}
+                  style={[styles.queueCard, isSelected && styles.queueCardSelected]}
+                  onPress={() => setSelectedQueue(isSelected ? 'all' : q.id)}
+                  activeOpacity={0.7}
+                >
+                  <View style={styles.queueCardLeft}>
+                    <View style={[styles.queueDot, { backgroundColor: isSelected ? COLORS.red : COLORS.gray300 }]} />
+                    <View>
+                      <Text style={styles.queueCardName}>{q.name}</Text>
+                      <Text style={styles.queueCardMeta}>
+                        {waitingCount} waiting · ~{q.estimated_wait_mins || 15} min · cap {q.capacity || 50}
+                      </Text>
+                    </View>
                   </View>
-                  <View style={styles.queueItemActions}>
-                    <TouchableOpacity
-                      style={[styles.actionBtn, styles.editBtn]}
-                      onPress={() => handleEditQueue(q)}
-                    >
-                      <Ionicons name="pencil-outline" size={16} color={COLORS.blue} />
+                  <View style={styles.queueCardActions}>
+                    <TouchableOpacity style={styles.editBtnSmall} onPress={() => handleEditQueue(q)}>
+                      <PhosphorIcon icon="NotePencil" size={14} color={COLORS.blue} weight="bold" />
                     </TouchableOpacity>
-                    <TouchableOpacity
-                      style={[styles.actionBtn, styles.deleteBtn]}
-                      onPress={() => handleDeleteQueue(q)}
-                    >
-                      <Ionicons name="trash-outline" size={16} color={COLORS.red} />
+                    <TouchableOpacity style={styles.deleteBtnSmall} onPress={() => handleDeleteQueue(q)}>
+                      <PhosphorIcon icon="Trash" size={14} color={COLORS.red} weight="bold" />
                     </TouchableOpacity>
                   </View>
-                </View>
+                </TouchableOpacity>
               );
             })}
-          </View>
-        )}
-
-        {/* Queue Selector */}
-        {queues && queues.length > 0 && (
-          <View style={styles.queueSelector}>
-            <Text style={styles.queueSelectorLabel}>Filter by Queue:</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.queueSelectorScroll}>
-              <TouchableOpacity
-                style={[styles.queueChip, selectedQueue === 'all' && styles.queueChipActive]}
-                onPress={() => setSelectedQueue('all')}
-              >
-                <Text style={[styles.queueChipText, selectedQueue === 'all' && styles.queueChipTextActive]}>
-                  All ({waitingList.length})
-                </Text>
-              </TouchableOpacity>
-              {queues.map((q) => {
-                const count = waitingList.filter((e) => e.queue_id === q.id).length;
-                return (
-                  <TouchableOpacity
-                    key={q.id}
-                    style={[styles.queueChip, selectedQueue === q.id && styles.queueChipActive]}
-                    onPress={() => setSelectedQueue(q.id)}
-                  >
-                    <Text style={[styles.queueChipText, selectedQueue === q.id && styles.queueChipTextActive]}>
-                      {q.name} ({count})
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </ScrollView>
           </View>
         )}
 
@@ -295,7 +283,7 @@ export default function StaffMyQueueScreen() {
 
         {filteredList.length === 0 ? (
           <View style={styles.emptyContainer}>
-            <Ionicons name="people-outline" size={48} color={COLORS.gray300} />
+            <PhosphorIcon icon="Users" size={48} color={COLORS.gray300} weight="bold" />
             <Text style={styles.emptyTitle}>No waiting customers</Text>
             <Text style={styles.emptySub}>
               {selectedQueue === 'all'
@@ -311,6 +299,7 @@ export default function StaffMyQueueScreen() {
                 key={entry.id}
                 entry={entry}
                 queueName={queueName}
+                createdByName={queues.find(q => q.id === entry.queue_id)?.created_by_name || (entry as any).created_by_name || undefined}
                 onServe={() => handleServeNext(entry.queue_id)}
                 onCall={() => handleCallCustomer(entry.id)}
                 onCancel={() => handleCancelCustomer(entry.id)}
@@ -328,7 +317,7 @@ export default function StaffMyQueueScreen() {
             onPress={() => handleServeNext(selectedQueue === 'all' ? undefined : selectedQueue)}
             disabled={processing}
           >
-            <Ionicons name="arrow-forward" size={20} color={COLORS.white} />
+            <PhosphorIcon icon="ArrowRight" size={20} color={COLORS.white} weight="bold" />
             <Text style={styles.serveButtonText}>
               {processing ? 'Serving...' : 'Serve Next Customer'}
             </Text>
@@ -464,26 +453,20 @@ const styles = StyleSheet.create({
   scroll: { flex: 1 },
   content: { padding: 16, paddingBottom: 100 },
   statsRow: { flexDirection: 'row', gap: 10, marginBottom: 16 },
-  statCard: { flex: 1, backgroundColor: COLORS.white, borderRadius: 10, padding: 14, alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.03, shadowRadius: 4, elevation: 1 },
-  statNumber: { fontSize: 24, fontWeight: '800', color: COLORS.red },
-  statLabel: { fontSize: 10, color: COLORS.gray500, textTransform: 'uppercase', fontWeight: '600', marginTop: 2 },
+  statCard: { flex: 1, backgroundColor: COLORS.white, borderRadius: 10, padding: 14, alignItems: 'center', justifyContent: 'center', gap: 4, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.03, shadowRadius: 4, elevation: 1, borderLeftWidth: 3 },
+  statNumber: { fontSize: 22, fontWeight: '800', color: COLORS.red },
+  statLabel: { fontSize: 10, color: COLORS.gray400, textTransform: 'uppercase', fontWeight: '600' },
   queuesSection: { backgroundColor: COLORS.white, borderRadius: 10, padding: 14, marginBottom: 16 },
   sectionTitle: { fontSize: 14, fontWeight: '700', color: COLORS.gray700, marginBottom: 10 },
-  queueItem: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: COLORS.gray100 },
-  queueItemLeft: { flex: 1 },
-  queueItemName: { fontSize: 14, fontWeight: '600', color: COLORS.gray900 },
-  queueItemMeta: { fontSize: 12, color: COLORS.gray500, marginTop: 2 },
-  queueItemActions: { flexDirection: 'row', gap: 8 },
-  actionBtn: { padding: 6, borderRadius: 6, borderWidth: 1 },
-  editBtn: { borderColor: COLORS.blue, backgroundColor: COLORS.blueLight },
-  deleteBtn: { borderColor: COLORS.red, backgroundColor: COLORS.redLight },
-  queueSelector: { backgroundColor: COLORS.white, borderRadius: 10, padding: 12, marginBottom: 16 },
-  queueSelectorLabel: { fontSize: 12, fontWeight: '600', color: COLORS.gray600, marginBottom: 8 },
-  queueSelectorScroll: { flexDirection: 'row' },
-  queueChip: { paddingHorizontal: 14, paddingVertical: 6, borderRadius: 20, backgroundColor: COLORS.gray100, marginRight: 8, borderWidth: 1, borderColor: 'transparent' },
-  queueChipActive: { backgroundColor: COLORS.red, borderColor: COLORS.red },
-  queueChipText: { fontSize: 12, fontWeight: '600', color: COLORS.gray600 },
-  queueChipTextActive: { color: COLORS.white },
+  queueCard: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: COLORS.gray50, borderRadius: 10, padding: 12, marginBottom: 8 },
+  queueCardSelected: { backgroundColor: COLORS.redLight, borderWidth: 1.5, borderColor: COLORS.red },
+  queueCardLeft: { flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 },
+  queueDot: { width: 8, height: 8, borderRadius: 4 },
+  queueCardName: { fontSize: 14, fontWeight: '700', color: COLORS.gray900 },
+  queueCardMeta: { fontSize: 11, color: COLORS.gray500, marginTop: 2 },
+  queueCardActions: { flexDirection: 'row', gap: 6 },
+  editBtnSmall: { padding: 6, borderRadius: 6, backgroundColor: COLORS.blueLight },
+  deleteBtnSmall: { padding: 6, borderRadius: 6, backgroundColor: COLORS.redLight },
   emptyContainer: { alignItems: 'center', paddingVertical: 40, gap: 8 },
   emptyTitle: { fontSize: 16, fontWeight: '700', color: COLORS.gray600 },
   emptySub: { fontSize: 13, color: COLORS.gray400, textAlign: 'center' },

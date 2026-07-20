@@ -12,6 +12,24 @@ interface StaffQueueStats {
   todayServed: number;
 }
 
+// ✅ Retry helper: waits and retries a function with exponential backoff
+async function retryUntil<T>(
+  fn: () => Promise<T | null>,
+  maxRetries: number = 5,
+  delayMs: number = 1000
+): Promise<T | null> {
+  for (let i = 0; i < maxRetries; i++) {
+    const result = await fn();
+    if (result) return result;
+    if (i < maxRetries - 1) {
+      console.log(`🏪 [useStaffQueue] 🔄 Retry ${i + 1}/${maxRetries} — waiting ${delayMs}ms...`);
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+      delayMs *= 1.5; // Exponential backoff: 1s, 1.5s, 2.25s, 3.4s, 5s
+    }
+  }
+  return null;
+}
+
 export function useStaffQueue(staffId: string | undefined) {
   console.log(`🏪 [useStaffQueue] 🎯 Hook called with staffId: ${staffId || 'undefined'}`);
 
@@ -36,6 +54,7 @@ export function useStaffQueue(staffId: string | undefined) {
   const channelRef = useRef<any>(null);
   const isMounted = useRef(true);
   const fetchCount = useRef(0);
+  const activeScopeRef = useRef<{ staffId?: string; establishmentId?: string | null }>({});
 
   const { addNotification } = useNotifications(staffId);
 
@@ -47,51 +66,100 @@ export function useStaffQueue(staffId: string | undefined) {
     }
   }, []);
 
-  // Get staff profile and find establishment
+  const resetState = useCallback(() => {
+    setEstablishment(null);
+    setEstablishmentId(null);
+    setStaffProfile(null);
+    setQueues([]);
+    setWaitingList([]);
+    setServingList([]);
+    setServedList([]);
+    setQueueTemplates([]);
+    setStats({ totalWaiting: 0, totalServing: 0, totalServed: 0, todayServed: 0 });
+    setError(null);
+    setLoading(true);
+  }, []);
+
+  // Get staff profile and find establishment — WITH RETRY
   useEffect(() => {
     let isActive = true;
+    activeScopeRef.current = { staffId, establishmentId: null };
+
+    if (!staffId) {
+      resetState();
+      setLoading(false);
+      setError('No staff ID provided');
+      return;
+    }
+
+    resetState();
+
     const getEstablishmentId = async () => {
-      if (!staffId) {
-        if (isActive) { setLoading(false); setError('No staff ID provided'); }
-        return;
-      }
       try {
         setError(null);
+        
+        // Step 1: Get profile
         const { data: profile, error: profileError } = await supabase
           .from('profiles').select('*').eq('id', staffId).single();
+        
         if (profileError) {
           if (isActive) { setError(`Profile error: ${profileError.message}`); setLoading(false); }
           return;
         }
         if (isActive) setStaffProfile(profile);
+        
         if (!profile.brand || !profile.branch) {
           if (isActive) { setError('Staff has no brand or branch assigned'); setLoading(false); }
           return;
         }
-        let { data: est, error: estError } = await supabase
-          .from('establishments').select('*')
-          .eq('brand', profile.brand).eq('branch', profile.branch).maybeSingle();
+
+        // ✅ Step 2: Look up establishment WITH RETRY
+        // This handles the race condition where ensureEstablishment in useAuth
+        // is still creating the establishment row
+        console.log(`🏪 [useStaffQueue] 🔍 Looking up establishment for ${profile.brand} - ${profile.branch}`);
         
-        if (estError) {
-          if (isActive) { setError(`Establishment error: ${estError.message}`); setLoading(false); }
-          return;
-        }
+        const est = await retryUntil<Establishment>(
+          async () => {
+            const { data, error: estError } = await supabase
+              .from('establishments')
+              .select('*')
+              .eq('brand', profile.brand)
+              .eq('branch', profile.branch)
+              .maybeSingle();
+            
+            if (estError) {
+              console.log(`🏪 [useStaffQueue] ⚠️ Establishment lookup error: ${estError.message}`);
+              return null;
+            }
+            return data as Establishment | null;
+          },
+          20,    // Max 20 retries
+          400    // Start with 400ms delay, exponential backoff
+        );
+
+        if (!isActive) return;
+
         if (est) {
-          if (isActive) { 
-            setEstablishment(est);
-            setEstablishmentId(est.id); 
-            setError(null); 
-          }
+          console.log(`🏪 [useStaffQueue] ✅ Establishment found: ${est.id}`);
+          setEstablishment(est);
+          setEstablishmentId(est.id);
+          activeScopeRef.current = { staffId, establishmentId: est.id };
+          setError(null);
         } else {
-          if (isActive) { setError(`No establishment found for ${profile.brand} - ${profile.branch}`); setLoading(false); }
+          console.log(`🏪 [useStaffQueue] ❌ Establishment not found after retries`);
+          if (isActive) { 
+            setError(`No establishment found for ${profile.brand} - ${profile.branch}. Try restarting the app.`); 
+            setLoading(false); 
+          }
         }
       } catch (err: any) {
         if (isActive) { setError(err.message || 'Unknown error'); setLoading(false); }
       }
     };
+    
     getEstablishmentId();
     return () => { isActive = false; };
-  }, [staffId]);
+  }, [staffId, resetState]);
 
   // Notify all staff in same branch
   const notifyStaffInBranch = useCallback(async (title: string, message: string, metadata: any) => {
@@ -139,7 +207,9 @@ export function useStaffQueue(staffId: string | undefined) {
   // Fetch staff data
   const fetchStaffData = useCallback(async () => {
     const currentFetch = ++fetchCount.current;
-    if (!staffId || !establishmentId) {
+    const activeScope = activeScopeRef.current;
+
+    if (!staffId || !activeScope.establishmentId) {
       if (isMounted.current) { setLoading(false); setError('Missing staff or establishment ID'); }
       return;
     }
@@ -147,8 +217,8 @@ export function useStaffQueue(staffId: string | undefined) {
     try {
       const { data: queuesData, error: queuesErr } = await supabase
         .from('queues')
-        .select('*')
-        .eq('establishment_id', establishmentId)
+        .select('*, created_by_profile:profiles!queues_created_by_fkey(name)')
+        .eq('establishment_id', activeScope.establishmentId)
         .order('name');
       if (queuesErr) throw new Error(`Queues error: ${queuesErr.message}`);
 
@@ -160,8 +230,10 @@ export function useStaffQueue(staffId: string | undefined) {
           .from('queue_entries')
           .select(`
             *,
-            user:profiles!queue_entries_user_id_fkey(id, name, email, role)
+            user:profiles!queue_entries_user_id_fkey(id, name, email, role),
+            queue:queues!inner(id, name, created_by, created_by_profile:profiles!queues_created_by_fkey(name))
           `)
+          .eq('establishment_id', activeScope.establishmentId)
           .in('queue_id', queueIds)
           .neq('status', 'cancelled')
           .order('ticket_number', { ascending: true });
@@ -173,10 +245,28 @@ export function useStaffQueue(staffId: string | undefined) {
       const serving = entries?.filter((e: any) => e.status === 'serving' && e.ticket_number > 0) || [];
       const served = entries?.filter((e: any) => e.status === 'completed' && e.ticket_number > 0) || [];
 
+      const mappedWaiting = waiting.map((e: any) => ({
+        ...e,
+        created_by_name: e.queue?.created_by_profile?.name || null,
+      }));
+      const mappedServing = serving.map((e: any) => ({
+        ...e,
+        created_by_name: e.queue?.created_by_profile?.name || null,
+      }));
+      const mappedServed = served.map((e: any) => ({
+        ...e,
+        created_by_name: e.queue?.created_by_profile?.name || null,
+      }));
+
       const updatedQueues = (queuesData || []).map((q: any) => {
         const qWaiting = waiting.filter((e: any) => e.queue_id === q.id).length;
         const qServing = serving.filter((e: any) => e.queue_id === q.id).length;
-        return { ...q, waitingCount: qWaiting, servingCount: qServing };
+        return {
+          ...q,
+          created_by_name: q.created_by_profile?.name || null,
+          waitingCount: qWaiting,
+          servingCount: qServing,
+        };
       });
 
       const templates = (queuesData || []).map((q: any) => ({
@@ -195,13 +285,13 @@ export function useStaffQueue(staffId: string | undefined) {
       if (isMounted.current && fetchCount.current === currentFetch) {
         setQueues(updatedQueues as Queue[]);
         setQueueTemplates(templates);
-        setWaitingList(waiting as QueueEntry[]);
-        setServingList(serving as QueueEntry[]);
-        setServedList(served as QueueEntry[]);
+        setWaitingList(mappedWaiting as QueueEntry[]);
+        setServingList(mappedServing as QueueEntry[]);
+        setServedList(mappedServed as QueueEntry[]);
         setStats({
-          totalWaiting: waiting.length,
-          totalServing: serving.length,
-          totalServed: served.length,
+          totalWaiting: mappedWaiting.length,
+          totalServing: mappedServing.length,
+          totalServed: mappedServed.length,
           todayServed,
         });
         setError(null);
@@ -215,7 +305,7 @@ export function useStaffQueue(staffId: string | undefined) {
         setLoading(false);
       }
     }
-  }, [staffId, establishmentId]);
+  }, [staffId]);
 
   // CREATE QUEUE
   const createQueue = useCallback(async (data: { 
@@ -224,7 +314,8 @@ export function useStaffQueue(staffId: string | undefined) {
     capacity?: number; 
     estimated_wait_mins?: number; 
   }) => {
-    if (!establishmentId || !staffId) {
+    const activeEstablishmentId = activeScopeRef.current.establishmentId || establishmentId;
+    if (!activeEstablishmentId || !staffId) {
       return { success: false, error: 'Missing establishment or staff' };
     }
     
@@ -235,12 +326,13 @@ export function useStaffQueue(staffId: string | undefined) {
       const { data: newQueue, error: insertError } = await supabase
         .from('queues')
         .insert({
-          establishment_id: establishmentId,
+          establishment_id: activeEstablishmentId,
           name: data.name.trim(),
           description: data.description || null,
           capacity: data.capacity || 50,
           estimated_wait_mins: data.estimated_wait_mins || 15,
           is_active: true,
+          created_by: staffId,
         })
         .select()
         .single();
@@ -268,11 +360,10 @@ export function useStaffQueue(staffId: string | undefined) {
         { queue_id: newQueue.id, queue_name: data.name, created_by: staffId }
       );
 
-      // 🆕 Notify ALL customers in same branch
       await notifyCustomersInBranch(
         '📋 New Queue Available!',
         `"${data.name}" queue is now open at ${establishment?.name || 'your branch'}. Join now!`,
-        { queue_id: newQueue.id, queue_name: data.name, establishment_id: establishmentId }
+        { queue_id: newQueue.id, queue_name: data.name, establishment_id: activeEstablishmentId }
       );
 
       await fetchStaffData();
@@ -286,18 +377,21 @@ export function useStaffQueue(staffId: string | undefined) {
 
   // UPDATE QUEUE
   const updateQueue = useCallback(async (queueId: string, updates: any) => {
-    if (!establishmentId) return { success: false, error: 'Missing establishment' };
+    const activeEstablishmentId = activeScopeRef.current.establishmentId || establishmentId;
+    if (!activeEstablishmentId) return { success: false, error: 'Missing establishment' };
     try {
       const { data: current } = await supabase
         .from('queues')
         .select('name')
         .eq('id', queueId)
+        .eq('establishment_id', activeEstablishmentId)
         .single();
 
       const { error } = await supabase
         .from('queues')
         .update(updates)
-        .eq('id', queueId);
+        .eq('id', queueId)
+        .eq('establishment_id', activeEstablishmentId);
       if (error) return { success: false, error: error.message };
 
       if (staffId) {
@@ -317,11 +411,11 @@ export function useStaffQueue(staffId: string | undefined) {
         { queue_id: queueId, queue_name: current?.name }
       );
 
-      // 🆕 Notify customers in this queue
       const { data: customersInQueue } = await supabase
         .from('queue_entries')
         .select('user_id')
         .eq('queue_id', queueId)
+        .eq('establishment_id', activeEstablishmentId)
         .in('status', ['waiting', 'serving']);
 
       if (customersInQueue) {
@@ -346,12 +440,14 @@ export function useStaffQueue(staffId: string | undefined) {
 
   // DELETE QUEUE
   const deleteQueue = useCallback(async (queueId: string) => {
-    if (!establishmentId) return { success: false, error: 'Missing establishment' };
+    const activeEstablishmentId = activeScopeRef.current.establishmentId || establishmentId;
+    if (!activeEstablishmentId) return { success: false, error: 'Missing establishment' };
     try {
       const { data: current } = await supabase
         .from('queues')
         .select('name')
         .eq('id', queueId)
+        .eq('establishment_id', activeEstablishmentId)
         .single();
 
       const queueName = current?.name || 'Unnamed Queue';
@@ -360,6 +456,7 @@ export function useStaffQueue(staffId: string | undefined) {
         .from('queue_entries')
         .select('id, user_id')
         .eq('queue_id', queueId)
+        .eq('establishment_id', activeEstablishmentId)
         .eq('status', 'waiting');
 
       if (waitingCustomers && waitingCustomers.length > 0) {
@@ -369,7 +466,8 @@ export function useStaffQueue(staffId: string | undefined) {
       const { error } = await supabase
         .from('queues')
         .delete()
-        .eq('id', queueId);
+        .eq('id', queueId)
+        .eq('establishment_id', activeEstablishmentId);
       if (error) return { success: false, error: error.message };
 
       if (staffId) {
@@ -404,13 +502,15 @@ export function useStaffQueue(staffId: string | undefined) {
 
   // SERVE NEXT
   const serveNext = useCallback(async (queueId?: string) => {
-    if (!establishmentId) return false;
+    const activeEstablishmentId = activeScopeRef.current.establishmentId || establishmentId;
+    if (!activeEstablishmentId) return false;
     if (processing) return false;
     setProcessing(true);
     try {
       let query = supabase
         .from('queue_entries')
         .select('*')
+        .eq('establishment_id', activeEstablishmentId)
         .eq('status', 'waiting')
         .gt('ticket_number', 0);
       
@@ -432,10 +532,10 @@ export function useStaffQueue(staffId: string | undefined) {
       const { error: updateErr } = await supabase
         .from('queue_entries')
         .update({ status: 'serving', called_at: new Date().toISOString(), updated_at: new Date().toISOString() })
-        .eq('id', next.id);
+        .eq('id', next.id)
+        .eq('establishment_id', activeEstablishmentId);
       if (updateErr) throw updateErr;
 
-      // 🆕 Notify the customer being served
       if (next.user_id) {
         await addNotification({
           user_id: next.user_id,
@@ -447,7 +547,6 @@ export function useStaffQueue(staffId: string | undefined) {
         });
       }
 
-      // 🆕 Notify other staff
       await notifyStaffInBranch(
         '🔔 Customer Called',
         `Ticket #${next.ticket_number} is now being served`,
@@ -462,13 +561,14 @@ export function useStaffQueue(staffId: string | undefined) {
     } finally { setProcessing(false); }
   }, [establishmentId, processing, fetchStaffData, establishment, addNotification, notifyStaffInBranch]);
 
-  // MARK SERVED (Manual complete by staff or customer)
+  // MARK SERVED
   const markServed = useCallback(async (entryId: string) => {
-    if (!establishmentId || processing) return false;
+    const activeEstablishmentId = activeScopeRef.current.establishmentId || establishmentId;
+    if (!activeEstablishmentId || processing) return false;
     setProcessing(true);
     try {
       const { data: entry, error: entryErr } = await supabase
-        .from('queue_entries').select('user_id, ticket_number, queue_id, status').eq('id', entryId).single();
+        .from('queue_entries').select('user_id, ticket_number, queue_id, status').eq('id', entryId).eq('establishment_id', activeEstablishmentId).single();
       if (entryErr) throw entryErr;
       
       const { error } = await supabase
@@ -479,10 +579,10 @@ export function useStaffQueue(staffId: string | undefined) {
           served_at: new Date().toISOString(), 
           updated_at: new Date().toISOString() 
         })
-        .eq('id', entryId);
+        .eq('id', entryId)
+        .eq('establishment_id', activeEstablishmentId);
       if (error) throw error;
       
-      // 🆕 Notify the customer
       if (entry && entry.user_id) {
         await addNotification({
           user_id: entry.user_id,
@@ -494,7 +594,6 @@ export function useStaffQueue(staffId: string | undefined) {
         });
       }
 
-      // 🆕 Notify staff
       await notifyStaffInBranch(
         '✅ Customer Served',
         `Ticket #${entry.ticket_number} marked as completed`,
@@ -511,20 +610,21 @@ export function useStaffQueue(staffId: string | undefined) {
 
   // CANCEL CUSTOMER
   const cancelCustomer = useCallback(async (entryId: string) => {
-    if (!establishmentId || processing) return false;
+    const activeEstablishmentId = activeScopeRef.current.establishmentId || establishmentId;
+    if (!activeEstablishmentId || processing) return false;
     setProcessing(true);
     try {
       const { data: entry, error: entryErr } = await supabase
-        .from('queue_entries').select('user_id, ticket_number').eq('id', entryId).single();
+        .from('queue_entries').select('user_id, ticket_number').eq('id', entryId).eq('establishment_id', activeEstablishmentId).single();
       if (entryErr) throw entryErr;
       
       const { error } = await supabase
         .from('queue_entries')
         .update({ status: 'cancelled', updated_at: new Date().toISOString() })
-        .eq('id', entryId);
+        .eq('id', entryId)
+        .eq('establishment_id', activeEstablishmentId);
       if (error) throw error;
       
-      // 🆕 Notify customer
       if (entry && entry.user_id) {
         await addNotification({
           user_id: entry.user_id,
@@ -536,7 +636,6 @@ export function useStaffQueue(staffId: string | undefined) {
         });
       }
 
-      // 🆕 Notify staff
       await notifyStaffInBranch(
         '❌ Customer Cancelled',
         `Ticket #${entry.ticket_number} cancelled`,
@@ -553,9 +652,10 @@ export function useStaffQueue(staffId: string | undefined) {
 
   // CALL CUSTOMER
   const callCustomer = useCallback(async (entryId: string) => {
+    const activeEstablishmentId = activeScopeRef.current.establishmentId || establishmentId;
     try {
       const { data: entry, error: findErr } = await supabase
-        .from('queue_entries').select('user_id, ticket_number').eq('id', entryId).single();
+        .from('queue_entries').select('user_id, ticket_number').eq('id', entryId).eq('establishment_id', activeEstablishmentId).single();
       if (findErr || !entry) return false;
       
       if (entry.user_id) {
@@ -575,7 +675,7 @@ export function useStaffQueue(staffId: string | undefined) {
     }
   }, [addNotification]);
 
-  // Get queues for My Queue tab
+  // Get queues
   const getQueues = useCallback(async () => {
     if (!establishmentId) return { success: false, error: 'Missing establishment', data: [] };
     try {
@@ -591,7 +691,7 @@ export function useStaffQueue(staffId: string | undefined) {
     }
   }, [establishmentId]);
 
-  // Get single queue by ID
+  // Get single queue
   const getQueueById = useCallback(async (queueId: string) => {
     if (!establishmentId) return { success: false, error: 'Missing establishment', data: null };
     try {
@@ -599,6 +699,7 @@ export function useStaffQueue(staffId: string | undefined) {
         .from('queues')
         .select('*')
         .eq('id', queueId)
+        .eq('establishment_id', establishmentId)
         .single();
       if (error) return { success: false, error: error.message, data: null };
       return { success: true, data: queue };
@@ -625,7 +726,8 @@ export function useStaffQueue(staffId: string | undefined) {
       .on('postgres_changes', { 
         event: '*', 
         schema: 'public', 
-        table: 'queue_entries' 
+        table: 'queue_entries',
+        filter: `establishment_id=eq.${establishmentId}`
       }, () => {
         if (isMounted.current) fetchStaffData();
       })

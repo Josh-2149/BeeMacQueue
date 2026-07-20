@@ -1,7 +1,6 @@
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, Image } from 'react-native';
 import { COLORS } from '../lib/constants';
-import { PhosphorIcon } from './PhosphorIcon';
 import { LiveDot } from './ui';
 
 interface CustomerHeaderProps {
@@ -16,7 +15,7 @@ export function CustomerHeader({ title, subtitle, rightElement }: CustomerHeader
       {/* Row 1 – Brand + LiveDot */}
       <View style={styles.brandRow}>
         <View style={styles.brandLeft}>
-          <PhosphorIcon icon="Storefront" size={20} color={COLORS.white} weight="bold" />
+          <Image source={require('../assets/logo.jpg')} style={styles.brandLogo} />
           <Text style={styles.brandText}>BeeMacQueue</Text>
         </View>
         <LiveDot />
@@ -52,7 +51,12 @@ const styles = StyleSheet.create({
   brandLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 12,
+  },
+  brandLogo: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
   },
   brandText: {
     fontSize: 16,

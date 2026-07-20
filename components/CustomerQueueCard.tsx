@@ -1,8 +1,14 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Image } from 'react-native';
 import { COLORS, BRAND } from '../lib/constants';
 import { PhosphorIcon } from './PhosphorIcon';
 import { Queue } from '../types';
+
+// ✅ Brand logos
+const BRAND_LOGOS: Record<string, any> = {
+  jollibee: require('../assets/brand_logos/jollibee.jpeg'),
+  mcdo: require('../assets/brand_logos/mcdo.jpeg'),
+};
 
 interface CustomerQueueCardProps {
   queue: Queue & { isFull?: boolean; servingCount?: number };
@@ -11,6 +17,7 @@ interface CustomerQueueCardProps {
   isServedToday?: boolean;
   isJoining?: boolean;
   hasActiveElsewhere?: boolean;
+  createdByName?: string;
 }
 
 export function CustomerQueueCard({ 
@@ -20,6 +27,7 @@ export function CustomerQueueCard({
   isServedToday,
   isJoining,
   hasActiveElsewhere,
+  createdByName,
 }: CustomerQueueCardProps) {
   const getQueueIcon = (): string => {
     const name = (queue.name || '').toLowerCase();
@@ -32,10 +40,12 @@ export function CustomerQueueCard({
 
   const brand = queue.establishment?.brand || 'jollibee';
   const brandInfo = BRAND[brand];
+  const brandLogo = BRAND_LOGOS[brand] || null;
   const waitingCount = queue.waitingCount || 0;
+  const servingCount = (queue as any).servingCount || 0;
   const isFull = (queue as any).isFull || false;
   const capacity = queue.capacity || 50;
-  const totalActive = waitingCount + ((queue as any).servingCount || 0);
+  const totalActive = waitingCount + servingCount;
 
   const getButtonConfig = () => {
     if (isUserQueue) {
@@ -56,7 +66,6 @@ export function CustomerQueueCard({
         showCapacity: false,
       };
     }
-    // 🆕 QUEUE FULL STATE
     if (isFull) {
       return {
         text: 'Queue Full',
@@ -87,7 +96,7 @@ export function CustomerQueueCard({
     }
     return {
       text: 'Join Queue',
-      bgColor: COLORS.red,
+      bgColor: brandInfo?.color || COLORS.red,
       icon: 'ArrowRight',
       disabled: false,
       showCapacity: false,
@@ -100,7 +109,7 @@ export function CustomerQueueCard({
     if (isUserQueue) return COLORS.green;
     if (isServedToday) return COLORS.blue;
     if (isFull) return COLORS.orange;
-    return brandInfo.color;
+    return brandInfo?.color || COLORS.red;
   };
 
   const accentColor = getAccentColor();
@@ -113,16 +122,15 @@ export function CustomerQueueCard({
       isFull && !isUserQueue && !isServedToday && styles.cardFull,
     ]}>
       <View style={styles.topRow}>
-        <View style={[
-          styles.queueIconContainer,
-          { backgroundColor: isUserQueue ? COLORS.greenLight : isServedToday ? COLORS.blueLight : isFull ? COLORS.orangeLight : COLORS.gray50 }
-        ]}>
-          <PhosphorIcon 
-            icon={getQueueIcon()} 
-            size={20} 
-            color={accentColor} 
-            weight="bold" 
-          />
+        {/* ✅ Brand Logo replaces the generic queue icon */}
+        <View style={styles.brandLogoContainer}>
+          {brandLogo ? (
+            <Image source={brandLogo} style={styles.brandLogo} resizeMode="cover" />
+          ) : (
+            <View style={[styles.queueIconFallback, { backgroundColor: COLORS.gray50 }]}>
+              <PhosphorIcon icon={getQueueIcon()} size={20} color={accentColor} weight="bold" />
+            </View>
+          )}
         </View>
 
         <View style={styles.queueInfo}>
@@ -153,29 +161,31 @@ export function CustomerQueueCard({
               {queue.establishment?.name || 'Branch'} - {queue.establishment?.branch || ''}
             </Text>
           </View>
+          {createdByName && (
+            <View style={styles.createdByRow}>
+              <PhosphorIcon icon="UserCircle" size={11} color={COLORS.gray400} weight="bold" />
+              <Text style={styles.createdByText}>Queue by: {createdByName}</Text>
+            </View>
+          )}
         </View>
 
+        {/* ✅ Active count badge with brand color accent */}
         <View style={[
           styles.waitingBadge,
-          isUserQueue && { backgroundColor: COLORS.greenLight },
-          isServedToday && { backgroundColor: COLORS.blueLight },
-          isFull && { backgroundColor: COLORS.orangeLight },
+          { borderColor: accentColor },
+          isUserQueue && { backgroundColor: COLORS.greenLight, borderColor: COLORS.green },
+          isServedToday && { backgroundColor: COLORS.blueLight, borderColor: COLORS.blue },
+          isFull && { backgroundColor: COLORS.orangeLight, borderColor: COLORS.orange },
         ]}>
           <PhosphorIcon 
             icon="Users" 
             size={14} 
-            color={isUserQueue ? COLORS.green : isServedToday ? COLORS.blue : isFull ? COLORS.orange : COLORS.gray600} 
+            color={accentColor} 
             weight="bold" 
           />
-          <Text style={[
-            styles.waitingCount,
-            isUserQueue && { color: COLORS.green },
-            isServedToday && { color: COLORS.blue },
-            isFull && { color: COLORS.orange },
-          ]}>
+          <Text style={[styles.waitingCount, { color: COLORS.gray900 }]}>
             {totalActive}
           </Text>
-          {/* 🆕 Show capacity */}
           <Text style={styles.capacityLabel}>/{capacity}</Text>
         </View>
       </View>
@@ -231,7 +241,7 @@ export function CustomerQueueCard({
 const styles = StyleSheet.create({
   card: {
     backgroundColor: COLORS.white,
-    borderRadius: 10,
+    borderRadius: 12,
     padding: 14,
     marginBottom: 10,
     shadowColor: '#000',
@@ -262,13 +272,23 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     marginBottom: 12,
   },
-  queueIconContainer: {
-    width: 40,
-    height: 40,
-    borderRadius: 8,
+  // ✅ Brand logo styling
+  brandLogoContainer: {
+    marginRight: 10,
+  },
+  brandLogo: {
+    width: 44,
+    height: 44,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: COLORS.gray200,
+  },
+  queueIconFallback: {
+    width: 44,
+    height: 44,
+    borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 10,
   },
   queueInfo: {
     flex: 1,
@@ -328,26 +348,38 @@ const styles = StyleSheet.create({
     color: COLORS.gray400,
     flexShrink: 1,
   },
+  createdByRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginBottom: 6,
+    marginTop: 2,
+  },
+  createdByText: {
+    fontSize: 10,
+    color: COLORS.gray400,
+    fontWeight: '500',
+  },
   waitingBadge: {
     alignItems: 'center',
     justifyContent: 'center',
-    paddingLeft: 8,
-    paddingVertical: 4,
-    paddingHorizontal: 8,
-    borderRadius: 8,
-    minWidth: 50,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 10,
+    borderWidth: 1.5,
+    minWidth: 56,
+    backgroundColor: COLORS.white,
   },
   waitingCount: {
     fontSize: 18,
     fontWeight: '800',
-    color: COLORS.gray900,
     marginTop: 1,
   },
   capacityLabel: {
     fontSize: 9,
     color: COLORS.gray400,
     fontWeight: '600',
-    marginTop: -1,
+    marginTop: -2,
   },
   servedMessage: {
     flexDirection: 'row',
@@ -383,9 +415,9 @@ const styles = StyleSheet.create({
   },
   joinButton: {
     flexDirection: 'row',
-    paddingVertical: 10,
+    paddingVertical: 11,
     paddingHorizontal: 16,
-    borderRadius: 8,
+    borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
     gap: 6,

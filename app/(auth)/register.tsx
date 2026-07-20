@@ -12,7 +12,7 @@ import {
   Dimensions,
   Animated,
   Keyboard,
-  Alert,
+  Image,
 } from 'react-native';
 import { Link, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -20,6 +20,8 @@ import { StatusBar } from 'expo-status-bar';
 import { useAuth } from '../../hooks/useAuth';
 import { COLORS } from '../../lib/constants';
 import { PhosphorIcon } from '../../components/PhosphorIcon';
+import { BrandLogo } from '../../components/BrandLogo';
+import { useToast } from '../../context/ToastContext';
 
 console.log('📝 [Register] Screen mounted');
 
@@ -80,23 +82,25 @@ export default function RegisterScreen() {
     outputRange: [SCREEN_HEIGHT * 0.25, 0],
   });
 
+  const { showToast } = useToast();
+
   const handleRegister = async () => {
     console.log('📝 [Register] Register attempt:', email, 'role:', role);
     setError('');
     Keyboard.dismiss();
     
     if (!name.trim() || !email.trim() || !password) {
-      setError('Please fill in all fields');
+      showToast({ title: 'Missing fields', message: 'Please fill in all fields', variant: 'error' });
       return;
     }
     
     if (password.length < 6) {
-      setError('Password must be at least 6 characters');
+      showToast({ title: 'Weak password', message: 'Password must be at least 6 characters', variant: 'error' });
       return;
     }
 
     if (role === 'staff' && !branch) {
-      setError('Please select a branch');
+      showToast({ title: 'Missing branch', message: 'Please select a branch', variant: 'error' });
       return;
     }
 
@@ -112,17 +116,12 @@ export default function RegisterScreen() {
     console.log('📝 [Register] Register result:', result);
     
     if (!result.success) {
-      setError(result.error || 'Registration failed');
+      showToast({ title: 'Registration failed', message: result.error || 'Please try again', variant: 'error' });
       return;
     }
 
-    Alert.alert(
-      '✅ Account Created!',
-      role === 'staff' 
-        ? `You're now a staff member at ${branch}! Please sign in.`
-        : 'Welcome to BeeMacQueue! Please sign in.',
-      [{ text: 'Sign In', onPress: () => router.replace('/(auth)/login') }]
-    );
+    showToast({ title: 'Account created', message: role === 'staff' ? `You're now a staff member at ${branch}! Please sign in.` : 'Welcome to BeeMacQueue! Please sign in.', variant: 'success' });
+    router.replace('/(auth)/login');
   };
 
   return (
@@ -136,14 +135,9 @@ export default function RegisterScreen() {
 
       {!isKeyboardVisible && (
         <Animated.View style={[styles.header, { opacity: fadeAnim }]}>
-          <View style={styles.logoWrapper}>
-            <PhosphorIcon icon="Storefront" size={40} color={COLORS.yellow} weight="fill" />
-          </View>
+          <BrandLogo />
           <Text style={styles.brandName}>
             Bee<Text style={styles.brandHighlight}>Mac</Text>Queue
-          </Text>
-          <Text style={styles.brandSubtitle}>
-            {role === 'staff' ? 'Staff Registration' : 'Join the queue revolution'}
           </Text>
         </Animated.View>
       )}
@@ -224,7 +218,13 @@ export default function RegisterScreen() {
                     }}
                     activeOpacity={0.7}
                   >
-                    <Text style={styles.brandEmoji}>🐝</Text>
+                    <View style={styles.brandImageWrapper}>
+                      <Image
+                        source={require('../../assets/brand_logos/jollibee.jpeg')}
+                        style={styles.brandImage}
+                        resizeMode="cover"
+                      />
+                    </View>
                     <Text style={[styles.brandText, brand === 'jollibee' && styles.brandTextActive]}>Jollibee</Text>
                   </TouchableOpacity>
 
@@ -236,7 +236,13 @@ export default function RegisterScreen() {
                     }}
                     activeOpacity={0.7}
                   >
-                    <Text style={styles.brandEmoji}>🍟</Text>
+                    <View style={styles.brandImageWrapper}>
+                      <Image
+                        source={require('../../assets/brand_logos/mcdo.jpeg')}
+                        style={styles.brandImage}
+                        resizeMode="cover"
+                      />
+                    </View>
                     <Text style={[styles.brandText, brand === 'mcdo' && styles.brandTextActive]}>McDonald's</Text>
                   </TouchableOpacity>
                 </View>
@@ -570,14 +576,25 @@ const styles = StyleSheet.create({
     borderColor: COLORS.red,
     backgroundColor: COLORS.redLight,
   },
-  brandEmoji: {
-    fontSize: 28,
-    marginBottom: 2,
+  brandImageWrapper: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: COLORS.white,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 8,
+  },
+  brandImage: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
   },
   brandText: {
     fontSize: 13,
     fontWeight: '600',
     color: COLORS.gray600,
+    textAlign: 'center',
   },
   brandTextActive: {
     color: COLORS.red,

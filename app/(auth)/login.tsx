@@ -12,6 +12,7 @@ import {
   Dimensions,
   Animated,
   Keyboard,
+  Alert,
 } from 'react-native';
 import { Link, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -19,21 +20,68 @@ import { StatusBar } from 'expo-status-bar';
 import { useAuth } from '../../hooks/useAuth';
 import { COLORS } from '../../lib/constants';
 import { PhosphorIcon } from '../../components/PhosphorIcon';
+import { BrandLogo } from '../../components/BrandLogo';
+import Particles from '../../components/Particles';
+import { useToast } from '../../context/ToastContext';
+import Svg, { Path, G } from 'react-native-svg';
 
 console.log('🔑 [Login] Screen mounted');
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
+// ✅ Google SVG Icon Component
+const GoogleIcon = () => (
+  <Svg width="22" height="22" viewBox="0 0 16 16">
+    <G fill="none" fillRule="evenodd" clipRule="evenodd">
+      <Path 
+        fill="#f44336" 
+        d="M7.209 1.061c.725-.081 1.154-.081 1.933 0a6.57 6.57 0 0 1 3.65 1.82a100 100 0 0 0-1.986 1.93q-1.876-1.59-4.188-.734q-1.696.78-2.362 2.528a78 78 0 0 1-2.148-1.658a.26.26 0 0 0-.16-.027q1.683-3.245 5.26-3.86" 
+        opacity="0.987" 
+      />
+      <Path 
+        fill="#ffc107" 
+        d="M1.946 4.92q.085-.013.161.027a78 78 0 0 0 2.148 1.658A7.6 7.6 0 0 0 4.04 7.99q.037.678.215 1.331L2 11.116Q.527 8.038 1.946 4.92" 
+        opacity="0.997" 
+      />
+      <Path 
+        fill="#448aff" 
+        d="M12.685 13.29a26 26 0 0 0-2.202-1.74q1.15-.812 1.396-2.228H8.122V6.713q3.25-.027 6.497.055q.616 3.345-1.423 6.032a7 7 0 0 1-.51.49" 
+        opacity="0.999" 
+      />
+      <Path 
+        fill="#43a047" 
+        d="M4.255 9.322q1.23 3.057 4.51 2.854a3.94 3.94 0 0 0 1.718-.626q1.148.812 2.202 1.74a6.62 6.62 0 0 1-4.027 1.684a6.4 6.4 0 0 1-1.02 0Q3.82 14.524 2 11.116z" 
+        opacity="0.993" 
+      />
+    </G>
+  </Svg>
+);
+
+// ✅ Facebook SVG Icon Component
+const FacebookIcon = () => (
+  <Svg width="22" height="22" viewBox="0 0 512 512">
+    <Path 
+      fill="#0866ff" 
+      d="M213.8 509.4C92.2 487.7 0 382.7 0 256C0 115.2 115.2 0 256 0s256 115.2 256 256c0 126.7-92.2 231.7-213.8 253.4l-14.1-11.5h-56.3z" 
+    />
+    <Path 
+      fill="#fff" 
+      d="m355.8 327.7l11.5-71.7h-67.8v-49.9c0-20.5 7.7-35.8 38.4-35.8h33.3V105c-17.9-2.6-38.4-5.1-56.3-5.1c-58.9 0-99.8 35.8-99.8 99.8V256h-64v71.7h64v180.5c14.1 2.6 28.2 3.8 42.2 3.8c14.1 0 28.2-1.3 42.2-3.8V327.7z" 
+    />
+  </Svg>
+);
+
 export default function LoginScreen() {
   console.log('🔑 [Login] Rendering');
   const router = useRouter();
-  const { signIn, loading } = useAuth();
+  const { signIn, signInWithGoogle, signInWithFacebook, loading } = useAuth();
   
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
+  const [socialLoading, setSocialLoading] = useState<'google' | 'facebook' | null>(null);
 
   const slideAnim = useRef(new Animated.Value(0)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -70,13 +118,15 @@ export default function LoginScreen() {
     outputRange: [SCREEN_HEIGHT * 0.25, 0],
   });
 
+  const { showToast } = useToast();
+
   const handleLogin = async () => {
     console.log('🔑 [Login] Login attempt:', email);
     setError('');
     Keyboard.dismiss();
     
     if (!email.trim() || !password) {
-      setError('Please enter email and password');
+      showToast({ title: 'Missing fields', message: 'Please enter email and password', variant: 'error' });
       return;
     }
 
@@ -84,7 +134,45 @@ export default function LoginScreen() {
     console.log('🔑 [Login] Login result:', result);
     
     if (!result.success) {
-      setError(result.error || 'Login failed');
+      showToast({ title: 'Login failed', message: result.error || 'Unable to sign in', variant: 'error' });
+    }
+  };
+
+  // ✅ Functional Google Sign-In
+  const handleGoogleSignIn = async () => {
+    try {
+      setSocialLoading('google');
+      const result = await signInWithGoogle();
+      if (result.success) {
+        showToast({ title: 'Success', message: 'Signed in with Google', variant: 'success' });
+        // Navigation will be handled by the auth guard
+      } else {
+        showToast({ title: 'Google Sign-In Failed', message: result.error || 'Unable to sign in with Google', variant: 'error' });
+      }
+    } catch (error: any) {
+      console.error('Google sign-in error:', error);
+      showToast({ title: 'Error', message: error.message || 'Failed to sign in with Google', variant: 'error' });
+    } finally {
+      setSocialLoading(null);
+    }
+  };
+
+  // ✅ Functional Facebook Sign-In
+  const handleFacebookSignIn = async () => {
+    try {
+      setSocialLoading('facebook');
+      const result = await signInWithFacebook();
+      if (result.success) {
+        showToast({ title: 'Success', message: 'Signed in with Facebook', variant: 'success' });
+        // Navigation will be handled by the auth guard
+      } else {
+        showToast({ title: 'Facebook Sign-In Failed', message: result.error || 'Unable to sign in with Facebook', variant: 'error' });
+      }
+    } catch (error: any) {
+      console.error('Facebook sign-in error:', error);
+      showToast({ title: 'Error', message: error.message || 'Failed to sign in with Facebook', variant: 'error' });
+    } finally {
+      setSocialLoading(null);
     }
   };
 
@@ -95,13 +183,12 @@ export default function LoginScreen() {
       <View style={styles.background}>
         <View style={styles.gradientTop} />
         <View style={styles.gradientBottom} />
+        <Particles count={25} />
       </View>
 
       {!isKeyboardVisible && (
         <Animated.View style={[styles.header, { opacity: fadeAnim }]}>
-          <View style={styles.logoWrapper}>
-            <PhosphorIcon icon="Storefront" size={48} color={COLORS.yellow} weight="fill" />
-          </View>
+          <BrandLogo />
           <Text style={styles.brandName}>
             Bee<Text style={styles.brandHighlight}>Mac</Text>Queue
           </Text>
@@ -197,6 +284,55 @@ export default function LoginScreen() {
               )}
             </TouchableOpacity>
 
+            <View style={styles.dividerRow}>
+              <View style={styles.dividerLine} />
+              <Text style={styles.dividerText}>or continue with</Text>
+              <View style={styles.dividerLine} />
+            </View>
+
+            {/* ✅ Social buttons in one row with rounded corners */}
+            <View style={styles.socialRow}>
+              <TouchableOpacity 
+                style={[
+                  styles.socialButton, 
+                  styles.googleButton,
+                  socialLoading === 'google' && styles.socialButtonDisabled
+                ]} 
+                onPress={handleGoogleSignIn}
+                disabled={socialLoading === 'google' || loading}
+                activeOpacity={0.7}
+              >
+                {socialLoading === 'google' ? (
+                  <ActivityIndicator size="small" color="#4285F4" />
+                ) : (
+                  <>
+                    <GoogleIcon />
+                    <Text style={[styles.socialButtonText, styles.googleButtonText]}>Google</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+
+              <TouchableOpacity 
+                style={[
+                  styles.socialButton, 
+                  styles.facebookButton,
+                  socialLoading === 'facebook' && styles.socialButtonDisabled
+                ]} 
+                onPress={handleFacebookSignIn}
+                disabled={socialLoading === 'facebook' || loading}
+                activeOpacity={0.7}
+              >
+                {socialLoading === 'facebook' ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <>
+                    <FacebookIcon />
+                    <Text style={[styles.socialButtonText, styles.facebookButtonText]}>Facebook</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            </View>
+
             <View style={styles.footer}>
               <Text style={styles.footerText}>Don't have an account? </Text>
               <Link href="/(auth)/register" asChild>
@@ -247,17 +383,6 @@ const styles = StyleSheet.create({
     paddingBottom: 20,
     paddingHorizontal: 24,
     alignItems: 'center',
-  },
-  logoWrapper: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: 'rgba(255,255,255,0.12)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 12,
-    borderWidth: 2,
-    borderColor: 'rgba(255,255,255,0.1)',
   },
   brandName: {
     fontSize: 32,
@@ -317,7 +442,7 @@ const styles = StyleSheet.create({
   welcomeSub: {
     fontSize: 14,
     color: COLORS.gray500,
-    marginBottom: 20,
+    marginBottom: 12,
   },
   errorBox: {
     flexDirection: 'row',
@@ -337,13 +462,13 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   inputGroup: {
-    marginBottom: 16,
+    marginBottom: 10,
   },
   label: {
     fontSize: 13,
     fontWeight: '700',
     color: COLORS.gray600,
-    marginBottom: 6,
+    marginBottom: 4,
   },
   inputWrapper: {
     flexDirection: 'row',
@@ -374,7 +499,7 @@ const styles = StyleSheet.create({
   },
   forgotButton: {
     alignSelf: 'flex-end',
-    marginBottom: 20,
+    marginBottom: 12,
   },
   forgotText: {
     fontSize: 13,
@@ -403,6 +528,58 @@ const styles = StyleSheet.create({
     color: COLORS.white,
     fontSize: 17,
     fontWeight: '800',
+  },
+  dividerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginVertical: 12,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: '#E5E7EB',
+  },
+  dividerText: {
+    marginHorizontal: 12,
+    color: '#6B7280',
+    fontSize: 13,
+  },
+  // ✅ Social buttons row - SIDE BY SIDE with MORE ROUNDED CORNERS
+  socialRow: {
+    flexDirection: 'column',
+    marginBottom: 12,
+  },
+  socialButton: {
+    width: '100%',
+    height: 50,
+    borderRadius: 25, // ✅ More rounded - fully pill-shaped
+    marginBottom: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 12,
+    gap: 10,
+  },
+  socialButtonDisabled: {
+    opacity: 0.6,
+  },
+  googleButton: {
+    backgroundColor: COLORS.white,
+    borderWidth: 1,
+    borderColor: '#DADCE0',
+  },
+  facebookButton: {
+    backgroundColor: '#1877F2',
+  },
+  socialButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  googleButtonText: {
+    color: COLORS.black,
+  },
+  facebookButtonText: {
+    color: COLORS.white,
   },
   footer: {
     flexDirection: 'row',
